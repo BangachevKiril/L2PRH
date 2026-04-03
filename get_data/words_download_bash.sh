@@ -16,7 +16,7 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 # ---------------- user config ----------------
-OUT_ROOT="/home/kirilb/orcd/pool/wordfreq_as_coco"
+OUT_ROOT="/home/kirilb/orcd/pool/words"
 N=50000
 
 python words_download.py \
