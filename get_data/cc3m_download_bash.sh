@@ -16,7 +16,7 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 PY_SCRIPT="cc3m_download.py"
-OUT_ROOT="/home/kirilb/orcd/pool/cc3m_subsample"
+OUT_ROOT="/home/kirilb/orcd/pool/cc3m"
 
 SAMPLE_SIZE=300000
 SEED=12345
