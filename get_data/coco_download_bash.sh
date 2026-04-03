@@ -16,7 +16,7 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 # -------------------- user config --------------------
-OUT_DIR="/home/kirilb/orcd/pool/test"   # will create $OUT_DIR/coco2017/
+OUT_DIR="/home/kirilb/orcd/pool"   # will create $OUT_DIR/coco2017/
 INCLUDE_TEST=0
 INCLUDE_TEST_INFO=0
 
