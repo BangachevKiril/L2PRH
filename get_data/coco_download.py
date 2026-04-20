@@ -119,7 +119,7 @@ def main():
     p.add_argument("--force", type=int, default=0, help="If 1, re-extract even if folders non-empty.")
     args = p.parse_args()
 
-    root = os.path.join(args.out_dir, "coco")
+    root = os.path.join(args.out_dir, "")
     zips_dir = os.path.join(root, "zips")
     os.makedirs(zips_dir, exist_ok=True)
 
