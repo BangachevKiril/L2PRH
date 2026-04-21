@@ -33,7 +33,7 @@ NAMES=(
   "visual_genome"
 )
 
-PY_SCRIPT="residual_statistics.py"
+PY_SCRIPT="residuals_plotting.py"
 
 # Optional knobs, overridable via environment variables:
 #   PRECISION=6 QUIET=1 sbatch residual_statistics_sh.sh
