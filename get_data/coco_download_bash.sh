@@ -17,7 +17,7 @@ conda activate L2PRHenv
 
 # -------------------- user config --------------------
 # This is the actual COCO folder.
-# After extraction you will have:
+# After extraction you should have:
 #   /home/kirilb/orcd/scratch/coco/train2017
 #   /home/kirilb/orcd/scratch/coco/val2017
 #   /home/kirilb/orcd/scratch/coco/annotations
@@ -28,14 +28,17 @@ OUT_DIR="/home/kirilb/orcd/scratch/coco"
 INCLUDE_TEST=0
 INCLUDE_TEST_INFO=0
 
-# Choose download tool:
-#   auto  -> prefers aria2c if installed, then wget, curl, python
-#   aria2c / wget / curl / python
+# auto -> aria2c if available, then wget, then curl, then python
 TOOL="auto"
 
-python coco_download.py \
+# Set to 1 to force re-extraction even if the target folders/files already exist
+FORCE=0
+
+SCRIPT_DIR="/mnt/data"
+
+python "coco_download.py" \
   --out_dir "$OUT_DIR" \
   --include_test "$INCLUDE_TEST" \
   --include_test_info "$INCLUDE_TEST_INFO" \
   --tool "$TOOL" \
-  --force 0
+  --force "$FORCE"

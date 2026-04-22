@@ -24,9 +24,9 @@ conda activate GPUenv
 #  User config
 # =========================
 
-DATASET = "visual_genome" # "coco", "cc3m", "visual_genome", "words"
-IN_ROOT="/home/kirilb/orcd/pool/${DATASET}"
-OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_${DATASET}"
+DATASET = "coco" # "coco", "cc3m", "visual_genome", "words"
+IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
+OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 CAPTIONS_PATH="${IN_ROOT}/annotations/captions_train2017.json" # Universal
 
 

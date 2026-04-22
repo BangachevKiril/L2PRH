@@ -6,7 +6,7 @@
 #SBATCH --time=05:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --partition=mit_preemptable
+#SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:1
 #SBATCH --array=0-5
 
@@ -18,9 +18,9 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 
-DATASET = "visual_genome" # "coco", "cc3m", "visual_genome", "words"
-IN_ROOT="/home/kirilb/orcd/pool/${DATASET}"
-OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_${DATASET}"
+DATASET = "coco" # "coco", "cc3m", "visual_genome", "words"
+IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
+OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 
 HF_CACHE_DIR="/home/kirilb/orcd/pool/huggingface_models_cache"
 
