@@ -13,10 +13,10 @@ mkdir -p logs
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate GPUenv
+conda activate L2PRHenv
 
 # ---------------- user config ----------------
-OUT_ROOT="/home/kirilb/orcd/pool/words"
+OUT_ROOT="/home/kirilb/orcd/scratch/words"
 N=50000
 
 python words_download.py \

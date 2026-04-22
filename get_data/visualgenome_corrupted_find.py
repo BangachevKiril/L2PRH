@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-OUT_ROOT = Path("/home/kirilb/orcd/pool/visual_genome/")  # <-- change
+OUT_ROOT = Path("/home/kirilb/orcd/scratch/visual_genome/")  # <-- change
 img_dir = OUT_ROOT / "images" / "train2017"
 
 # load VG meta

@@ -13,16 +13,24 @@ mkdir -p logs
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate GPUenv
+conda activate L2PRHenv
 
 # -------------------- user config --------------------
-OUT_DIR="/home/kirilb/orcd/pool/coco"   # will create $OUT_DIR/coco2017/
+# This is the actual COCO folder.
+# After extraction you will have:
+#   /home/kirilb/orcd/scratch/coco/train2017
+#   /home/kirilb/orcd/scratch/coco/val2017
+#   /home/kirilb/orcd/scratch/coco/annotations
+# and optionally:
+#   /home/kirilb/orcd/scratch/coco/test2017
+OUT_DIR="/home/kirilb/orcd/scratch/coco"
+
 INCLUDE_TEST=0
 INCLUDE_TEST_INFO=0
 
-# Choose a download tool:
-# - auto (prefers aria2c if installed)
-# - aria2c / wget / curl / python
+# Choose download tool:
+#   auto  -> prefers aria2c if installed, then wget, curl, python
+#   aria2c / wget / curl / python
 TOOL="auto"
 
 python coco_download.py \

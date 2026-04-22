@@ -119,17 +119,42 @@ def parse_tsv_line(line) -> Optional[Row]:
     return Row(url=url, caption=caption)
 
 
-
 def iter_tsv_lines_from_url(url: str, timeout: float, user_agent: str) -> Iterable[str]:
-    with requests.get(url, stream=True, timeout=max(timeout, 60.0), headers={"User-Agent": user_agent}) as r:
-        r.raise_for_status()
-        for line in r.iter_lines():
-            if not line:
-                continue
-            if isinstance(line, (bytes, bytearray)):
-                yield line.decode("utf-8", errors="replace")
-            else:
-                yield str(line)
+    try:
+        with requests.get(url, stream=True, timeout=max(timeout, 60.0), headers={"User-Agent": user_agent}) as r:
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                if isinstance(line, (bytes, bytearray)):
+                    yield line.decode("utf-8", errors="replace")
+                else:
+                    yield str(line)
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else None
+        if status == 403:
+            msg = (
+                "[error] Could not access the CC3M TSV URL because the server returned HTTP 403.\n"
+                f"[error] URL: {url}\n"
+                "[error] This is usually an access / hosting issue with the TSV endpoint, not a bug in the sampler.\n"
+                "[error] Fix: download Train_GCC-training.tsv separately and rerun with --tsv_path /path/to/Train_GCC-training.tsv,\n"
+                "[error] or pass an alternate mirror with --tsv_url."
+            )
+        else:
+            msg = (
+                "[error] Could not access the CC3M TSV URL.\n"
+                f"[error] URL: {url}\n"
+                f"[error] HTTP status: {status}\n"
+                "[error] Rerun with --tsv_path /path/to/Train_GCC-training.tsv or a working --tsv_url."
+            )
+        raise RuntimeError(msg) from e
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(
+            "[error] Failed while opening the CC3M TSV source.\n"
+            f"[error] URL: {url}\n"
+            f"[error] Details: {e}\n"
+            "[error] Rerun with --tsv_path /path/to/Train_GCC-training.tsv or a working --tsv_url."
+        ) from e
 
 
 def iter_tsv_lines_from_file(path: str) -> Iterable[str]:
@@ -242,6 +267,10 @@ def main():
     args = parse_args()
     random.seed(args.seed)
 
+    if args.tsv_path and not os.path.isfile(args.tsv_path):
+        print(f"[error] TSV file not found: {args.tsv_path}", file=sys.stderr)
+        sys.exit(2)
+
     img_dir, ann_dir = ensure_dirs(args.out_root, args.split_dir)
     ann_path = os.path.join(ann_dir, args.ann_name)
     fail_log_path = os.path.join(ann_dir, "cc3m_train_sample_failures.jsonl")
@@ -325,7 +354,7 @@ def main():
                     "height": h,
                     "license": 0,
                     "flickr_url": "",
-                    "coco_url": row.url,  # stash original url
+                    "coco_url": row.url,
                     "date_captured": "",
                 }
             )

@@ -13,7 +13,7 @@ mkdir -p logs
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate GPUenv
+conda activate L2PRHenv
 
 # -------------------- user config --------------------
 PY_SCRIPT="visualgenome_download.py"
@@ -21,7 +21,7 @@ PY_SCRIPT="visualgenome_download.py"
 # This will create:
 #   $OUT_DIR/annotations/captions_train2017.json
 #   $OUT_DIR/images/train2017/*.jpg
-OUT_DIR="/home/kirilb/orcd/pool/visual_genome"
+OUT_DIR="/home/kirilb/orcd/scratch/visual_genome"
 
 # Overwrite existing downloads/extractions/output JSON (0/1)
 OVERWRITE=0
