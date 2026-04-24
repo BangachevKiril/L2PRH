@@ -9,9 +9,16 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 def parse_args():
-    p = argparse.ArgumentParser("Embed COCO captions with an LLM (middle layer only), pool per image, sort, save.")
+    p = argparse.ArgumentParser(
+        "Embed COCO captions with an LLM (middle layer only), pool per image, sort, save."
+    )
     p.add_argument("--model_name", type=str, required=True)
-    p.add_argument("--captions_path", type=str, required=True, help="COCO captions JSON (must contain images + annotations).")
+    p.add_argument(
+        "--captions_path",
+        type=str,
+        required=True,
+        help="COCO captions JSON (must contain images + annotations).",
+    )
     p.add_argument("--output_dir", type=str, required=True)
     p.add_argument("--batch_size", type=int, default=16)
     p.add_argument("--max_length", type=int, default=128)
@@ -25,7 +32,7 @@ def load_coco_image_caption_pairs(coco_json_path):
     Returns:
       captions: List[str]               (one per annotation)
       img_indices: np.ndarray[int64]    (same length as captions; maps annotation -> image row index)
-      img_names: List[str]             (length = num_images_with_captions; row index -> image file name)
+      img_names: List[str]              (length = num_images_with_captions; row index -> image file name)
     """
     with open(coco_json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -59,7 +66,6 @@ def load_coco_image_caption_pairs(coco_json_path):
     if len(captions) == 0:
         raise ValueError("No valid (image_id, caption) pairs found in COCO JSON.")
 
-    # Only keep images that actually appear in annotations
     used_imgids = sorted(set(ann_imgids))
     imgid_to_idx = {imgid: i for i, imgid in enumerate(used_imgids)}
     img_names = [imgid_to_name[i] for i in used_imgids]
@@ -69,10 +75,9 @@ def load_coco_image_caption_pairs(coco_json_path):
 
 
 def mean_pool_tokens(h, attention_mask):
-    # h: (B,T,D), mask: (B,T)
-    m = attention_mask.unsqueeze(-1).to(h.dtype)  # (B,T,1)
-    denom = m.sum(dim=1).clamp(min=1.0)          # (B,1)
-    return (h * m).sum(dim=1) / denom            # (B,D)
+    m = attention_mask.unsqueeze(-1).to(h.dtype)
+    denom = m.sum(dim=1).clamp(min=1.0)
+    return (h * m).sum(dim=1) / denom
 
 
 def l2_normalize_rows(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -82,9 +87,9 @@ def l2_normalize_rows(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
 def get_transformer_layers(model):
     candidate_paths = [
         ("model", "layers"),
-        ("model", "model", "layers"),              # Gemma-style nesting
+        ("model", "model", "layers"),
         ("language_model", "layers"),
-        ("language_model", "model", "layers"),     # multimodal wrapper nesting
+        ("language_model", "model", "layers"),
         ("text_model", "layers"),
         ("model", "text_model", "layers"),
         ("model", "decoder", "layers"),
@@ -109,7 +114,9 @@ def get_transformer_layers(model):
     for _name, mod in model.named_modules():
         if isinstance(mod, nn.ModuleList) and len(mod) > 0:
             first = mod[0]
-            looks_like_block = any(hasattr(first, a) for a in ["self_attn", "attn", "attention", "mlp", "feed_forward"])
+            looks_like_block = any(
+                hasattr(first, a) for a in ["self_attn", "attn", "attention", "mlp", "feed_forward"]
+            )
             score = (1000 if looks_like_block else 0) + len(mod)
             if score > best_score:
                 best_score = score
@@ -125,6 +132,9 @@ def main():
     args = parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.output_dir, exist_ok=True)
+
+    if not os.path.isfile(args.captions_path):
+        raise FileNotFoundError(f"Captions JSON not found: {args.captions_path}")
 
     print(f"Loading COCO captions+images from {args.captions_path}...")
     captions, img_indices, img_names = load_coco_image_caption_pairs(args.captions_path)
@@ -155,7 +165,7 @@ def main():
 
     layers = get_transformer_layers(model)
     n_layers = len(layers)
-    mid_block_idx = n_layers // 2  # "middle layer" (0-indexed)
+    mid_block_idx = n_layers // 2
 
     print(f"n_layers={n_layers} | using middle block index={mid_block_idx}")
 
@@ -167,7 +177,7 @@ def main():
 
     h_mid = layers[mid_block_idx].register_forward_hook(hook_mid)
 
-    sum_embs = None          # (n_imgs, D) float32
+    sum_embs = None
     counts = np.zeros((n_imgs,), dtype=np.int32)
 
     print("Embedding captions (middle layer) and accumulating per-image means...")
@@ -193,13 +203,12 @@ def main():
                 raise RuntimeError("Hook did not capture middle-layer outputs.")
 
             attn = batch["attention_mask"]
-            cap_vecs = mean_pool_tokens(captured["mid"], attn).detach().float().cpu().numpy()  # (B,D), float32
+            cap_vecs = mean_pool_tokens(captured["mid"], attn).detach().float().cpu().numpy()
 
             if sum_embs is None:
                 D = cap_vecs.shape[1]
                 sum_embs = np.zeros((n_imgs, D), dtype=np.float32)
 
-            # sum per image (handles repeated indices)
             np.add.at(sum_embs, batch_img_idx, cap_vecs)
             np.add.at(counts, batch_img_idx, 1)
 
@@ -211,18 +220,15 @@ def main():
     if sum_embs is None:
         raise RuntimeError("No embeddings were produced (unexpected).")
 
-    # Mean-pool captions per image, then unit-normalize
     denom = np.maximum(counts[:, None], 1)
     img_text_embs = sum_embs / denom
     img_text_embs = l2_normalize_rows(img_text_embs)
 
-    # Sort by lexicographic order of image names
     img_names_arr = np.array(img_names, dtype=object)
     order = np.argsort(img_names_arr, kind="mergesort")
     img_names_sorted = img_names_arr[order].tolist()
     img_text_embs_sorted = img_text_embs[order]
 
-    # Save exactly the requested files
     np.save(os.path.join(args.output_dir, "text_embeddings.npy"), img_text_embs_sorted)
     with open(os.path.join(args.output_dir, "img_names.txt"), "w", encoding="utf-8") as f:
         for name in img_names_sorted:

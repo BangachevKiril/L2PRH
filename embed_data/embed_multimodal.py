@@ -27,6 +27,7 @@ Notes:
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import os
 import re
@@ -125,7 +126,6 @@ def apply_mask_list(xs: List[torch.Tensor], mask: torch.Tensor) -> List[torch.Te
 
 
 def sort_batch_by_indices(xs: List[torch.Tensor], idxs: torch.Tensor) -> Tuple[List[torch.Tensor], torch.Tensor]:
-    # DataLoader should already be ordered, but keep invariants.
     if idxs.numel() <= 1:
         return xs, idxs
     if torch.all(idxs[1:] >= idxs[:-1]):
@@ -135,6 +135,26 @@ def sort_batch_by_indices(xs: List[torch.Tensor], idxs: torch.Tensor) -> Tuple[L
     order_list = order.tolist()
     xs2 = [xs[i] for i in order_list]
     return xs2, idxs2
+
+
+def filter_kwargs_for_callable(fn, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Keep only kwargs accepted by fn, unless fn has **kwargs.
+    This is the key robustness fix for models whose processor returns
+    keys like pixel_attention_mask but whose get_image_features()
+    signature does not accept them.
+    """
+    sig = inspect.signature(fn)
+    params = sig.parameters
+
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return kwargs
+
+    allowed = {name for name, p in params.items() if p.kind in (
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    )}
+    return {k: v for k, v in kwargs.items() if k in allowed}
 
 
 # -------------------------
@@ -215,7 +235,7 @@ class EncoderBackend:
 
 class TransformersCLIPLikeBackend(EncoderBackend):
     """
-    Uses AutoModel + AutoProcessor with get_image_features/get_text_features.
+    Uses AutoModel + explicit processor classes for CLIP/SigLIP families.
     Does NOT normalize internally.
     """
 
@@ -236,7 +256,15 @@ class TransformersCLIPLikeBackend(EncoderBackend):
                 f"Original error: {e}"
             )
 
-        from transformers import AutoModel, AutoProcessor
+        from transformers import (
+            AutoModel,
+            AutoProcessor,
+            AutoTokenizer,
+            CLIPProcessor,
+            CLIPImageProcessor,
+            SiglipProcessor,
+            SiglipImageProcessor,
+        )
 
         self.model_id = model_id
         self.device = device
@@ -254,16 +282,37 @@ class TransformersCLIPLikeBackend(EncoderBackend):
         if use_fast_processor is not None:
             proc_kwargs["use_fast"] = bool(use_fast_processor)
 
-        self.processor = AutoProcessor.from_pretrained(model_id, **proc_kwargs)
+        mt = str(getattr(getattr(self.model, "config", None), "model_type", "")).lower()
+        mid = model_id.lower()
+
+        self.is_siglip_family = (mt in ("siglip", "siglip2")) or ("siglip" in mid)
+        self.is_clip_family = (mt == "clip") or (("clip" in mid) and ("siglip" not in mid))
+
+        if self.is_clip_family:
+            image_processor = CLIPImageProcessor.from_pretrained(model_id, **proc_kwargs)
+            tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
+            self.processor = CLIPProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+        elif self.is_siglip_family:
+            try:
+                from transformers import Siglip2Processor, Siglip2ImageProcessor
+
+                image_processor = Siglip2ImageProcessor.from_pretrained(model_id, **proc_kwargs)
+                tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
+                self.processor = Siglip2Processor(image_processor=image_processor, tokenizer=tokenizer)
+            except Exception:
+                image_processor = SiglipImageProcessor.from_pretrained(model_id, **proc_kwargs)
+                tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
+                self.processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+        else:
+            self.processor = AutoProcessor.from_pretrained(model_id, **proc_kwargs)
 
         self.model.eval().to(self.device)
 
         if not (hasattr(self.model, "get_image_features") and hasattr(self.model, "get_text_features")):
             raise RuntimeError(f"{self.model_id} does not expose get_image_features/get_text_features.")
 
-        mt = str(getattr(getattr(self.model, "config", None), "model_type", "")).lower()
-        mid = model_id.lower()
-        self.is_siglip_family = (mt in ("siglip", "siglip2")) or ("siglip" in mid)
         self.siglip_text_max_len = None
         if self.is_siglip_family:
             try:
@@ -273,11 +322,14 @@ class TransformersCLIPLikeBackend(EncoderBackend):
 
     @torch.no_grad()
     def embed_images_pixels_uint8(self, pixel_batch: Union[torch.Tensor, List[torch.Tensor]]) -> torch.Tensor:
-        # processor handles resizing/cropping/normalization
         inputs = self.processor(images=pixel_batch, return_tensors="pt")
         inputs = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
 
-        img_kwargs = {k: v for k, v in inputs.items() if k not in ("input_ids", "attention_mask", "token_type_ids")}
+        img_kwargs = {
+            k: v for k, v in inputs.items()
+            if k not in ("input_ids", "attention_mask", "token_type_ids")
+        }
+        img_kwargs = filter_kwargs_for_callable(self.model.get_image_features, img_kwargs)
 
         if self.autocast_dtype is not None and self.device.type == "cuda":
             with torch.autocast("cuda", dtype=self.autocast_dtype):
@@ -298,10 +350,16 @@ class TransformersCLIPLikeBackend(EncoderBackend):
                 return_tensors="pt",
             )
         else:
-            inputs = self.processor(text=texts, padding=True, truncation=True, return_tensors="pt")
+            inputs = self.processor(
+                text=texts,
+                padding=True,
+                truncation=True,
+                return_tensors="pt",
+            )
 
         inputs = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
         txt_kwargs = {k: v for k, v in inputs.items() if k in ("input_ids", "attention_mask", "token_type_ids")}
+        txt_kwargs = filter_kwargs_for_callable(self.model.get_text_features, txt_kwargs)
 
         if self.autocast_dtype is not None and self.device.type == "cuda":
             with torch.autocast("cuda", dtype=self.autocast_dtype):
@@ -350,7 +408,6 @@ class CocoImageDataset(torch.utils.data.Dataset):
                     x = x[:3]
             return x.contiguous(), idx
 
-        # fallback PIL
         from PIL import Image
         try:
             img = Image.open(path)
@@ -364,7 +421,6 @@ class CocoImageDataset(torch.utils.data.Dataset):
 
 
 def collate_list(batch):
-    # IMPORTANT: do NOT call .pin_memory() here; collate runs in worker processes.
     xs = [b[0] for b in batch]
     idxs = torch.tensor([b[1] for b in batch], dtype=torch.long)
     return xs, idxs
@@ -422,13 +478,11 @@ def embed_model(
         use_fast_processor=use_fast_processor,
     )
 
-    # names
     if not os.path.exists(names_path):
         with open(names_path, "w", encoding="utf-8") as f:
             for im in images:
                 f.write(im.file_name + "\n")
 
-    # resume
     start_idx = 0
     if resume and os.path.exists(progress_path):
         try:
@@ -456,7 +510,6 @@ def embed_model(
 
     loader = torch.utils.data.DataLoader(**dl_kwargs)
 
-    # determine D
     D = get_existing_dim(img_embeds_path)
     if D is None:
         got = False
@@ -516,13 +569,11 @@ def embed_model(
             b_start = int(idxs[0])
             b_end = int(idxs[-1]) + 1
 
-        # ---- images ----
         img_e = backend.embed_images_pixels_uint8(xs)
         if normalize:
             img_e = l2_normalize(img_e)
         img_mm[b_start:b_end, :] = img_e.numpy()
 
-        # ---- captions ----
         flat_texts: List[str] = []
         group_ids_list: List[int] = []
         idxs_list = idxs.tolist()
@@ -554,7 +605,6 @@ def embed_model(
             pooled = l2_normalize(pooled)
         txt_mm[b_start:b_end, :] = pooled.numpy()
 
-        # progress
         next_index = b_end
         atomic_save_json(progress_path, {"next_index": next_index})
         pbar.update(b_end - b_start)

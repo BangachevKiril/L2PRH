@@ -8,7 +8,7 @@
 #SBATCH --mem=32G
 #SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:1
-#SBATCH --array=0-5   # self-truncates based on MODELS below
+#SBATCH --array=0-3   # self-truncates based on MODELS below
 
 mkdir -p logs
 
@@ -23,13 +23,13 @@ conda activate coco_text_embed
 # =========================
 #  User config
 # =========================
-DATASET_NAME="visual_genome" # change if needed; "coco", "cc3m", "visual_genome", "words"   
+DATASET_NAME="cc3m" # change if needed; "coco", "cc3m", "visual_genome", "words"   
 
-IN_ROOT="/home/kirilb/orcd/pool/${DATASET_NAME}"
+IN_ROOT="/home/kirilb/orcd/scratch/${DATASET_NAME}"
 
 CAPTIONS_JSON="${IN_ROOT}/annotations/captions_train2017.json"
 
-OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_${DATASET_NAME}" 
+OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET_NAME}" 
 
 HF_CACHE_DIR="/home/kirilb/orcd/pool/huggingface_models_cache"
 
@@ -45,11 +45,6 @@ MODELS=(
   "codefuse-ai/F2LLM-1.7B"
   "codefuse-ai/F2LLM-4B"
 )
-
-MODELS=(
-  "codefuse-ai/F2LLM-1.7B"
-  "codefuse-ai/F2LLM-4B"    
-    )
 
 mkdir -p "$OUT_ROOT" "$HF_CACHE_DIR"
 

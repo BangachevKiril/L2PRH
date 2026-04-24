@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=embed_coco_fastio
-#SBATCH --output=logs/embed_coco_fastio_%A_%a.out
-#SBATCH --error=logs/embed_coco_fastio_%A_%a.err
+#SBATCH --job-name=embed_multimodal
+#SBATCH --output=logs/embed_multimodal_%A_%a.out
+#SBATCH --error=logs/embed_multimodal_%A_%a.err
 #SBATCH --time=05:59:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
@@ -23,14 +23,11 @@ conda activate GPUenv
 # -------------------------
 # User config
 # -------------------------
-DATASET = "visual_genome" # "coco", "cc3m", "visual_genome", "words"
-IN_ROOT="/home/kirilb/orcd/pool/${DATASET}"
-OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_${DATASET}"
+DATASET="coco" # "coco", "cc3m", "visual_genome", "words"
+IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
+OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 
 SPLIT="train"  # train | val   (used only for COCO captions_{split}2017.json mode)
-
-# OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_coco_fastio"
-OUT_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_visual_genome_fastio"
 
 HF_CACHE_DIR="/home/kirilb/orcd/pool/huggingface_models_cache"
 
@@ -41,10 +38,10 @@ NUM_WORKERS=8                # parallel image decode workers
 PREFETCH_FACTOR=4            # batches prefetched per worker
 TEXT_CHUNK_SIZE=4096         # max captions per text embed call (prevents spikes)
 
-# Path to the new Python script
+# Path to the Python script
 PY_SCRIPT="embed_multimodal.py"
 
-# Models list (edit this array)
+# Models list
 MODELS=(
   "openai/clip-vit-base-patch32"
   "openai/clip-vit-large-patch14"
@@ -78,6 +75,9 @@ export HUGGINGFACE_HUB_CACHE="$HF_CACHE_DIR/hub"
 export TRANSFORMERS_CACHE="$HF_CACHE_DIR/transformers"
 export HF_DATASETS_CACHE="$HF_CACHE_DIR/datasets"
 export HF_HUB_DISABLE_TELEMETRY=1
+
+# Optional, if you have a token:
+# export HF_TOKEN="your_token_here"
 
 # -------------------------
 # Sanity check: COCO captions file must exist

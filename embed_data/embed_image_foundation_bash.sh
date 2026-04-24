@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=embed_img_fast
-#SBATCH --output=logs/embed_img_fast_%A_%a.out
-#SBATCH --error=logs/embed_img_fast_%A_%a.err
+#SBATCH --job-name=embed_image_foundation
+#SBATCH --output=logs/embed_image_foundation_%A_%a.out
+#SBATCH --error=logs/embed_image_foundation_%A_%a.err
 #SBATCH --time=05:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
@@ -18,7 +18,7 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 
-DATASET = "coco" # "coco", "cc3m", "visual_genome", "words"
+DATASET="coco" # "coco", "cc3m", "visual_genome", "words"
 IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
 OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 
