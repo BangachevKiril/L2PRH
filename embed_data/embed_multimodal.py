@@ -107,13 +107,12 @@ def get_existing_dim(path: str) -> Optional[int]:
 
 def set_hf_cache_dir(hf_cache_dir: str) -> None:
     """
-    Prefer HF_HOME. TRANSFORMERS_CACHE is deprecated but leaving it set is harmless.
+    Prefer HF_HOME. Avoid setting TRANSFORMERS_CACHE to suppress deprecation warnings.
     """
     hf_cache_dir = os.path.abspath(hf_cache_dir)
     ensure_dir(hf_cache_dir)
     os.environ.setdefault("HF_HOME", hf_cache_dir)
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", os.path.join(hf_cache_dir, "hub"))
-    os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(hf_cache_dir, "transformers"))
     os.environ.setdefault("HF_DATASETS_CACHE", os.path.join(hf_cache_dir, "datasets"))
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
@@ -140,9 +139,6 @@ def sort_batch_by_indices(xs: List[torch.Tensor], idxs: torch.Tensor) -> Tuple[L
 def filter_kwargs_for_callable(fn, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     """
     Keep only kwargs accepted by fn, unless fn has **kwargs.
-    This is the key robustness fix for models whose processor returns
-    keys like pixel_attention_mask but whose get_image_features()
-    signature does not accept them.
     """
     sig = inspect.signature(fn)
     params = sig.parameters
@@ -150,11 +146,108 @@ def filter_kwargs_for_callable(fn, kwargs: Dict[str, Any]) -> Dict[str, Any]:
     if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()):
         return kwargs
 
-    allowed = {name for name, p in params.items() if p.kind in (
-        inspect.Parameter.POSITIONAL_OR_KEYWORD,
-        inspect.Parameter.KEYWORD_ONLY,
-    )}
+    allowed = {
+        name for name, p in params.items()
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
     return {k: v for k, v in kwargs.items() if k in allowed}
+
+
+def ensure_image_batch_list(pixel_batch: Union[torch.Tensor, List[torch.Tensor]]) -> List[torch.Tensor]:
+    """
+    Normalize image input to a Python list of CHW uint8 tensors.
+    Handles:
+      - a single CHW tensor
+      - a batched BCHW tensor
+      - an existing list of CHW tensors
+    """
+    if isinstance(pixel_batch, list):
+        return pixel_batch
+
+    if not isinstance(pixel_batch, torch.Tensor):
+        raise TypeError(f"Unsupported image batch type: {type(pixel_batch)}")
+
+    if pixel_batch.ndim == 3:
+        return [pixel_batch]
+
+    if pixel_batch.ndim == 4:
+        return [pixel_batch[i] for i in range(pixel_batch.shape[0])]
+
+    raise ValueError(f"Expected image tensor with ndim 3 or 4, got shape {tuple(pixel_batch.shape)}")
+
+
+def ensure_batch_dim(x: torch.Tensor, expected_ndim_without_batch: int) -> torch.Tensor:
+    """
+    If processor/model returned a singleton example without batch dimension,
+    add it back. Example:
+      image: CHW -> BCHW
+      text:  L  -> BL
+      mask: HW  -> BHW
+    """
+    if x.ndim == expected_ndim_without_batch:
+        return x.unsqueeze(0)
+    return x
+
+
+def chw_uint8_tensor_to_pil_rgb(x: torch.Tensor):
+    """
+    Convert a uint8 image tensor to a PIL RGB image.
+
+    Input is normally CHW from torchvision.io.read_image.
+    This avoids SigLIP/SigLIP2 processor layout confusion with torch tensors.
+    """
+    from PIL import Image
+
+    if not isinstance(x, torch.Tensor):
+        raise TypeError(f"Expected torch.Tensor image, got {type(x)}")
+
+    x = x.detach().cpu()
+
+    # Handle accidental HWC tensors too.
+    if x.ndim == 3 and x.shape[-1] in (1, 3, 4) and x.shape[0] not in (1, 3, 4):
+        x = x.permute(2, 0, 1).contiguous()
+
+    if x.ndim == 2:
+        x = x.unsqueeze(0)
+
+    if x.ndim != 3:
+        raise ValueError(f"Expected image tensor with shape CHW or HWC, got {tuple(x.shape)}")
+
+    # Force RGB.
+    if x.shape[0] == 1:
+        x = x.repeat(3, 1, 1)
+    elif x.shape[0] == 4:
+        x = x[:3]
+    elif x.shape[0] != 3:
+        x = torch.zeros((3, 32, 32), dtype=torch.uint8)
+
+    if x.dtype != torch.uint8:
+        x = x.clamp(0, 255).to(torch.uint8)
+
+    arr = x.permute(1, 2, 0).contiguous().numpy()
+    return Image.fromarray(arr).convert("RGB")
+
+
+def fix_pixel_values_shape(pv: torch.Tensor, model_id: str) -> torch.Tensor:
+    """Normalize image processor output to [B, 3, H, W]."""
+    if not isinstance(pv, torch.Tensor):
+        raise TypeError(f"pixel_values for {model_id} is not a tensor: {type(pv)}")
+
+    pv = ensure_batch_dim(pv, expected_ndim_without_batch=3)
+
+    # If processor returns BHWC, convert to BCHW.
+    if pv.ndim == 4 and pv.shape[1] != 3 and pv.shape[-1] == 3:
+        pv = pv.permute(0, 3, 1, 2).contiguous()
+
+    if pv.ndim != 4 or pv.shape[1] != 3:
+        raise RuntimeError(
+            f"Bad pixel_values shape from processor for {model_id}: "
+            f"{tuple(pv.shape)}. Expected [B, 3, H, W]. "
+            "If this is SigLIP2, make sure the code is forcing SiglipImageProcessor, "
+            "not Siglip2ImageProcessor."
+        )
+
+    return pv
 
 
 # -------------------------
@@ -294,16 +387,16 @@ class TransformersCLIPLikeBackend(EncoderBackend):
             self.processor = CLIPProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
         elif self.is_siglip_family:
-            try:
-                from transformers import Siglip2Processor, Siglip2ImageProcessor
-
-                image_processor = Siglip2ImageProcessor.from_pretrained(model_id, **proc_kwargs)
-                tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
-                self.processor = Siglip2Processor(image_processor=image_processor, tokenizer=tokenizer)
-            except Exception:
-                image_processor = SiglipImageProcessor.from_pretrained(model_id, **proc_kwargs)
-                tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
-                self.processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+            # IMPORTANT:
+            # In this environment, google/siglip2-*-patch16-256 loads through a
+            # SiglipModel-style vision tower expecting raw BCHW pixels [B, 3, H, W].
+            # Siglip2ImageProcessor can return patchified NaFlex-style tensors like
+            # [B, 1, num_patches, patch_dim], e.g. [1, 1, 256, 768], which is
+            # incompatible with modeling_siglip.py. Force the classic SigLIP
+            # processor pair even for siglip2 model IDs.
+            image_processor = SiglipImageProcessor.from_pretrained(model_id, **proc_kwargs)
+            tokenizer = AutoTokenizer.from_pretrained(model_id, **proc_kwargs)
+            self.processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
         else:
             self.processor = AutoProcessor.from_pretrained(model_id, **proc_kwargs)
@@ -322,7 +415,28 @@ class TransformersCLIPLikeBackend(EncoderBackend):
 
     @torch.no_grad()
     def embed_images_pixels_uint8(self, pixel_batch: Union[torch.Tensor, List[torch.Tensor]]) -> torch.Tensor:
-        inputs = self.processor(images=pixel_batch, return_tensors="pt")
+        image_list_raw = ensure_image_batch_list(pixel_batch)
+
+        # Convert CHW torch tensors to PIL RGB before calling the HF processor.
+        # This avoids CLIP/SigLIP processor ambiguity about tensor layout.
+        image_list = [chw_uint8_tensor_to_pil_rgb(x) for x in image_list_raw]
+
+        # With the forced classic SiglipImageProcessor above, batched PIL images
+        # should now produce [B, 3, H, W]. If an old/new processor still does
+        # something strange, fix_pixel_values_shape will fail early with a clear
+        # message instead of letting conv2d fail deep in the model.
+        inputs = self.processor(images=image_list, return_tensors="pt")
+
+        if "pixel_values" not in inputs:
+            raise RuntimeError(f"Processor for {self.model_id} did not return pixel_values.")
+
+        inputs["pixel_values"] = fix_pixel_values_shape(inputs["pixel_values"], self.model_id)
+
+        if "pixel_attention_mask" in inputs and isinstance(inputs["pixel_attention_mask"], torch.Tensor):
+            inputs["pixel_attention_mask"] = ensure_batch_dim(
+                inputs["pixel_attention_mask"], expected_ndim_without_batch=2
+            )
+
         inputs = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
 
         img_kwargs = {
@@ -356,6 +470,11 @@ class TransformersCLIPLikeBackend(EncoderBackend):
                 truncation=True,
                 return_tensors="pt",
             )
+
+        # Similar singleton robustness on text side.
+        for key in ("input_ids", "attention_mask", "token_type_ids"):
+            if key in inputs and isinstance(inputs[key], torch.Tensor):
+                inputs[key] = ensure_batch_dim(inputs[key], expected_ndim_without_batch=1)
 
         inputs = {k: v.to(self.device, non_blocking=True) for k, v in inputs.items()}
         txt_kwargs = {k: v for k, v in inputs.items() if k in ("input_ids", "attention_mask", "token_type_ids")}
@@ -399,6 +518,7 @@ class CocoImageDataset(torch.utils.data.Dataset):
 
             if x.ndim == 2:
                 x = x.unsqueeze(0)
+
             if self.force_rgb:
                 if x.shape[0] == 1:
                     x = x.repeat(3, 1, 1)
@@ -406,6 +526,7 @@ class CocoImageDataset(torch.utils.data.Dataset):
                     x = x[:3]
                 elif x.shape[0] > 4:
                     x = x[:3]
+
             return x.contiguous(), idx
 
         from PIL import Image

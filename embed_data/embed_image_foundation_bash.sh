@@ -18,7 +18,7 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
 
-DATASET="coco" # "coco", "cc3m", "visual_genome", "words"
+DATASET="cc3m" # "coco", "cc3m", "visual_genome", "words"
 IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
 OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 

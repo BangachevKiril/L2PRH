@@ -8,7 +8,7 @@
 #SBATCH --mem=32G
 #SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:1
-#SBATCH --array=0-3   # self-truncates based on MODELS below
+#SBATCH --array=4-5   # self-truncates based on MODELS below
 
 mkdir -p logs
 

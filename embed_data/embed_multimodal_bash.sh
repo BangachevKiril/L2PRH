@@ -23,7 +23,7 @@ conda activate GPUenv
 # -------------------------
 # User config
 # -------------------------
-DATASET="coco" # "coco", "cc3m", "visual_genome", "words"
+DATASET="cc3m" # "coco", "cc3m", "visual_genome", "words"
 IN_ROOT="/home/kirilb/orcd/scratch/${DATASET}"
 OUT_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
 
@@ -72,7 +72,6 @@ echo "MODEL_ID=${MODEL_ID}"
 mkdir -p "$OUT_ROOT" "$HF_CACHE_DIR"
 export HF_HOME="$HF_CACHE_DIR"
 export HUGGINGFACE_HUB_CACHE="$HF_CACHE_DIR/hub"
-export TRANSFORMERS_CACHE="$HF_CACHE_DIR/transformers"
 export HF_DATASETS_CACHE="$HF_CACHE_DIR/datasets"
 export HF_HUB_DISABLE_TELEMETRY=1
 
