@@ -23,7 +23,7 @@ conda activate coco_text_embed
 # =========================
 #  User config
 # =========================
-DATASET_NAME="cc3m" # change if needed; "coco", "cc3m", "visual_genome", "words"   
+DATASET_NAME="words" # change if needed; "coco", "cc3m", "visual_genome", "words"   
 
 IN_ROOT="/home/kirilb/orcd/scratch/${DATASET_NAME}"
 
