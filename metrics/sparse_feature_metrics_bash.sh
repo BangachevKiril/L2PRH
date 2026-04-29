@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=subsample_metrics_donly
-#SBATCH --output=logs/subsample_metrics_donly_%A_%a.out
-#SBATCH --error=logs/subsample_metrics_donly_%A_%a.err
+#SBATCH --job-name=subsample_metrics_grid
+#SBATCH --output=logs/subsample_metrics_grid_%A_%a.out
+#SBATCH --error=logs/subsample_metrics_grid_%A_%a.err
 #SBATCH --time=05:59:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=128G
 #SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:1
-#SBATCH --array=0-7   # set to 0-(#dims * #sparsities * #normalizations - 1)
+#SBATCH --array=0-7   # set to 0-(#corpora * #dims * #sparsities * #normalizations - 1)
 
 mkdir -p logs
 
@@ -19,18 +19,21 @@ conda activate GPUenv
 
 PY_SCRIPT="sparse_feature_metrics.py"
 
-DATASET = "visual_genome" # "coco", "cc3m", "visual_genome", "words"
-TOPK_ROOT="/home/kirilb/orcd/pool/alt_sae_prh/batchtopk_sae/topk_sae_${DATASET}/"
+# --------------------- corpus-level datasets ---------------------
+# This is the outer dataset sweep: one SLURM array job per corpus/dim/sparsity/normalization.
+CORPUS_LIST=(
+  "coco"
+  "cc3m"
+  "visual_genome"
+)
 
-OUT_TOPK_ROOT="/home/kirilb/orcd/pool/PRH_data/metrics_embedded_${DATASET}"
+HOW_MANY_SAMPLES=10
+SUBSAMPLE_SIZE=1000
+SEED_BASE=12345
+DEVICE="cuda"
 
-HOW_MANY_SAMPLES=10 # number of subsamples to evaluate
-SUBSAMPLE_SIZE=1000 # size of each subsample
-SEED_BASE=12345 # seed for random number generator
-DEVICE="cuda" # device to use for computation
-
-IS_BINARY=0 # 0: weighted, 1: binary
-PROFILE_METRICS=0 # 0: no profiling, 1: profiling
+IS_BINARY=0          # 0: weighted, 1: binary
+PROFILE_METRICS=0    # 0: no profiling, 1: profiling
 
 SVCCA_DIM1=10
 SVCCA_DIM2=100
@@ -39,15 +42,17 @@ TOPK_K2=100
 EDIT_K1=10
 EDIT_K2=100
 
-# --------------------- sweep over D, sparsity pattern, and normalization ---------------------
+# --------------------- sweep over corpus, D, sparsity pattern, and normalization ---------------------
 DS_LIST=(8192 16384)
-SPARSITY_PATTERNS=("var") # "32" "64" "128" sparsity patterns; There are custom sparsity patterns for each model defined below. We train each of them
-USE_TRUNCATED_LIST=(1) # 0: full, 1: truncated
+SPARSITY_PATTERNS=("var")          # "var" "32" "64" "128"
+USE_NORMALIZED_LIST=(1)            # preserves your existing behavior: 0 -> X_features.npz, 1 -> X_features_truncated.npz
 
+NC=${#CORPUS_LIST[@]}
 ND=${#DS_LIST[@]}
 NS=${#SPARSITY_PATTERNS[@]}
-NU=${#USE_TRUNCATED_LIST[@]}
-TOTAL_JOBS=$((ND * NS * NU))
+NU=${#USE_NORMALIZED_LIST[@]}
+
+TOTAL_JOBS=$((NC * ND * NS * NU))
 
 GRID_ID=${SLURM_ARRAY_TASK_ID:-0}
 if (( GRID_ID < 0 || GRID_ID >= TOTAL_JOBS )); then
@@ -56,27 +61,40 @@ if (( GRID_ID < 0 || GRID_ID >= TOTAL_JOBS )); then
   exit 1
 fi
 
-D_IDX=$(( GRID_ID / (NS * NU) ))
-REM=$(( GRID_ID % (NS * NU) ))
-S_IDX=$(( REM / NU ))
-U_IDX=$(( REM % NU ))
+# Decode GRID_ID into:
+#   C_IDX -> corpus dataset
+#   D_IDX -> dictionary dimension
+#   S_IDX -> sparsity pattern
+#   U_IDX -> normalization/truncation flag
+C_IDX=$(( GRID_ID / (ND * NS * NU) ))
+REM0=$(( GRID_ID % (ND * NS * NU) ))
 
+D_IDX=$(( REM0 / (NS * NU) ))
+REM1=$(( REM0 % (NS * NU) ))
+
+S_IDX=$(( REM1 / NU ))
+U_IDX=$(( REM1 % NU ))
+
+DATASET="${CORPUS_LIST[$C_IDX]}"
 D="${DS_LIST[$D_IDX]}"
 SPARSITY_PATTERN="${SPARSITY_PATTERNS[$S_IDX]}"
-USE_TRUNCATED="${USE_TRUNCATED_LIST[$U_IDX]}"
+USE_NORMALIZED="${USE_NORMALIZED_LIST[$U_IDX]}"
 
-# --------------------- suffix depends on use_normalized ---------------------
-if [[ "$USE_TRUNCATED" -eq 0 ]]; then
+TOPK_ROOT="/home/kirilb/orcd/scratch/alt_sae_prh/batchtopk_sae/topk_sae_${DATASET}"
+OUT_TOPK_ROOT="/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_${DATASET}"
+
+# --------------------- suffix depends on normalization/truncation ---------------------
+if [[ "$USE_NORMALIZED" -eq 0 ]]; then
   NORM_TAG="full"
-elif [[ "$USE_TRUNCATED" -eq 1 ]]; then
+elif [[ "$USE_NORMALIZED" -eq 1 ]]; then
   NORM_TAG="truncated"
 else
   echo "ERROR: USE_NORMALIZED must be 0 or 1, got: $USE_NORMALIZED"
   exit 1
 fi
 
-# --------------------- datasets ---------------------
-DATASETS=(
+# --------------------- model/modality datasets inside each corpus ---------------------
+MODEL_DATASETS=(
   "codefuse-ai__F2LLM-1.7B/text"
   "codefuse-ai__F2LLM-4B/text"
   "Qwen__Qwen3-1.7B-Base/text"
@@ -162,19 +180,21 @@ echo "PY_SCRIPT=$PY_SCRIPT"
 ls -l "$PY_SCRIPT" || { echo "ERROR: cannot find $PY_SCRIPT in $(pwd)"; exit 1; }
 
 echo "GRID_ID=$GRID_ID / $((TOTAL_JOBS-1))"
+echo "C_IDX=$C_IDX / $((NC-1)) -> DATASET=$DATASET"
 echo "D_IDX=$D_IDX / $((ND-1)) -> D=$D"
 echo "S_IDX=$S_IDX / $((NS-1)) -> SPARSITY_PATTERN=$SPARSITY_PATTERN"
 echo "U_IDX=$U_IDX / $((NU-1)) -> USE_NORMALIZED=$USE_NORMALIZED ($NORM_TAG)"
+echo "TOPK_ROOT=$TOPK_ROOT"
 echo "OUT_DIR=$OUT_DIR"
 
-N=${#DATASETS[@]}
+N=${#MODEL_DATASETS[@]}
 if (( ${#K_LIST[@]} != N )); then
-  echo "ERROR: K_LIST length (${#K_LIST[@]}) must equal DATASETS length ($N)"
+  echo "ERROR: K_LIST length (${#K_LIST[@]}) must equal MODEL_DATASETS length ($N)"
   exit 1
 fi
 
 NUM_PAIRS=$(( N * (N - 1) / 2 ))
-echo "Total datasets: $N"
+echo "Total model/modality entries: $N"
 echo "Total unordered pairs: $NUM_PAIRS"
 
 COMMON_ARGS=(
@@ -204,7 +224,7 @@ fi
 dataset_to_modelkey () {
   local ds="$1"
   local model="${ds%/*}"
-  local kind="${ds##*/}"   # text or img
+  local kind="${ds##*/}"
   echo "${model}_${kind}"
 }
 
@@ -246,6 +266,7 @@ pair_index_to_ij () {
   local kpair=$1
   local rem=$kpair
   local i j cnt
+
   for ((i=0; i< N-1; i++)); do
     cnt=$((N - i - 1))
     if (( rem < cnt )); then
@@ -255,6 +276,7 @@ pair_index_to_ij () {
     fi
     rem=$((rem - cnt))
   done
+
   return 1
 }
 
@@ -267,8 +289,8 @@ run_pair_k () {
   i=$(echo "$ij" | awk '{print $1}')
   j=$(echo "$ij" | awk '{print $2}')
 
-  local DS1="${DATASETS[$i]}"
-  local DS2="${DATASETS[$j]}"
+  local DS1="${MODEL_DATASETS[$i]}"
+  local DS2="${MODEL_DATASETS[$j]}"
 
   local M1 M2
   M1=$(dataset_to_modelkey "$DS1")
@@ -282,6 +304,7 @@ run_pair_k () {
     echo "ERROR: bad K1='$K1' for index $i ($M1)"
     exit 1
   fi
+
   if ! [[ "$K2" =~ ^[0-9]+$ ]] || (( K2 <= 0 )); then
     echo "ERROR: bad K2='$K2' for index $j ($M2)"
     exit 1
@@ -297,7 +320,9 @@ run_pair_k () {
   local SEED=$((SEED_BASE + kpair + 100000*GRID_ID + 10000000*K1 + 1000000000*K2))
 
   echo "------------------------------------------------------------"
-  echo "GRID_ID=$GRID_ID (D=$D, sparsity=$SPARSITY_PATTERN, use_normalized=$USE_NORMALIZED) | pair k=$kpair (i=$i, j=$j)"
+  echo "GRID_ID=$GRID_ID"
+  echo "DATASET=$DATASET, D=$D, sparsity=$SPARSITY_PATTERN, USE_NORMALIZED=$USE_NORMALIZED ($NORM_TAG)"
+  echo "pair k=$kpair (i=$i, j=$j)"
   echo "Comparing: $M1 (k=$K1)  vs  $M2 (k=$K2)"
   echo "Seed: $SEED"
   echo "Expecting:"
@@ -311,6 +336,7 @@ run_pair_k () {
     echo "SKIP missing: $P1"
     return 0
   fi
+
   if [[ ! -f "$P2" ]]; then
     echo "SKIP missing: $P2"
     return 0
@@ -319,7 +345,7 @@ run_pair_k () {
   mkdir -p "$OUT_DIR"
 
   if [[ ! -f "${OUT_DIR%/}/K_LIST.txt" ]]; then
-    printf "%s\n" "${DATASETS[@]}" | paste -d' ' - <(printf "%s\n" "${K_LIST[@]}") > "${OUT_DIR%/}/K_LIST.txt"
+    printf "%s\n" "${MODEL_DATASETS[@]}" | paste -d' ' - <(printf "%s\n" "${K_LIST[@]}") > "${OUT_DIR%/}/K_LIST.txt"
   fi
 
   python -u "$PY_SCRIPT" "$M1" "$M2" \

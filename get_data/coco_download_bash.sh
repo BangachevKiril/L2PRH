@@ -42,7 +42,7 @@ KEEP_ZIPS=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-python "$SCRIPT_DIR/coco_download_train_only.py" \
+python "coco_download.py" \
   --out_dir "$OUT_DIR" \
   --tool "$TOOL" \
   --force "$FORCE" \
