@@ -13,7 +13,7 @@ mkdir -p logs
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate L2PRHenv
+conda activate GPUenv
 
 # -------------------- user config --------------------
 PY_SCRIPT="visualgenome_download.py"

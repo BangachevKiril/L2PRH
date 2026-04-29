@@ -17,15 +17,14 @@ source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv   # env with numpy+scipy
 
 # --------------------- Script ---------------------
-PY_SCRIPT="sparse_truncation.py"
+PY_SCRIPT="sparse_feature_truncation.py"
 
 # --------------------- Folder list ---------------------
 # One SLURM array task per entry here.
 ROOTS=(
-   "/home/kirilb/orcd/pool/PRH_data/topk_sae_coco/"
-   "/home/kirilb/orcd/pool/PRH_data/topk_sae_visual_genome/"
-   "/home/kirilb/orcd/pool/PRH_data/topk_sae_cc3m/"
-   "/home/kirilb/orcd/pool/PRH_data/topk_sae_words/"
+   "/home/kirilb/orcd/scratch/PRH_data/topk_sae_coco/"
+   "/home/kirilb/orcd/scratch/PRH_data/topk_sae_visual_genome/"
+   "/home/kirilb/orcd/scratch/PRH_data/topk_sae_cc3m/"
 )
 
 ROOT="${ROOTS[$SLURM_ARRAY_TASK_ID]}"

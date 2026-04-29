@@ -8,7 +8,7 @@
 #SBATCH --mem=32G
 #SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:h200:1
-#SBATCH --array=0-31   # fixed 32 tasks, works for ANY number of pairs
+#SBATCH --array=0-29   # fixed 30 tasks, works for ANY number of pairs
 
 mkdir -p logs
 
@@ -27,8 +27,8 @@ PY_SCRIPT="rolling_window_metrics.py"
 
 # Root directory that contains per-model folders
 # e.g. /home/kirilb/orcd/pool/PRH_data/embedded_words/<MODEL>/text_embeddings(_normalized).npy
-INPUT_PATH="/home/kirilb/orcd/pool/PRH_data/embedded_words"
-OUTPUT_DIR="/home/kirilb/orcd/pool/PRH_data/metrics_embedded_words/"
+INPUT_PATH="/home/kirilb/orcd/scratch/PRH_data/embedded_words"
+OUTPUT_DIR="/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words/"
 
 # Use normalized embeddings?
 USE_NORMALIZED=1   # 1 => add --use_normalized, 0 => raw

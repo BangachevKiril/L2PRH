@@ -3,7 +3,7 @@
 #SBATCH --job-name=topk_sae
 #SBATCH --output=logs/alive_topk_sae_%A_%a.out
 #SBATCH --error=logs/alive_topk_sae_%A_%a.err
-#SBATCH --time=05:00:00
+#SBATCH --time=05:59:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=128G
 #SBATCH --partition=mit_normal_gpu
@@ -12,10 +12,10 @@
 
 # --------------------- User config ---------------------
 
-DATASET="visual_genome"  # "coco", "cc3m", "visual_genome", "words"
+DATASET="cc3m"  # "coco", "cc3m", "visual_genome", "words"
 
-EMBEDDED_COCO_ROOT="/home/kirilb/orcd/pool/PRH_data/embedded_${DATASET}"
-BASE_OUTPUT_DIR="/home/kirilb/orcd/pool/PRH_data/topk_sae_${DATASET}"
+EMBEDDED_COCO_ROOT="/home/kirilb/orcd/scratch/PRH_data/embedded_${DATASET}"
+BASE_OUTPUT_DIR="/home/kirilb/orcd/scratch/PRH_data/topk_sae_${DATASET}"
 
 MODEL_SPECS=(
   "codefuse-ai__F2LLM-1.7B/text"
@@ -93,7 +93,7 @@ for DIM in "${HIDDEN_DIMS[@]}"; do
 
     echo "Training: DIM=${DIM} | K=${K} | scheduler=${SCHEDULER}"
 
-    python -u topk_sae_with_scheduler.py \
+    python -u topk_sae.py \
       --model_spec "$MODEL_SPEC" \
       --output_dir "$BASE_OUTPUT_DIR" \
       --hidden_dim "$DIM" \

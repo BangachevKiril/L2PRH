@@ -21,10 +21,10 @@ PY_SCRIPT="center_embeddings.py"
 
 # List the root folders you want to process (one per array task)
 DIRS=(
-  "/home/kirilb/orcd/pool/PRH_data/embedded_coco"
-  "/home/kirilb/orcd/pool/PRH_data/embedded_cc3m"
-  "/home/kirilb/orcd/pool/PRH_data/embedded_visual_genome"
-  "/home/kirilb/orcd/pool/PRH_data/embedded_words"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_coco"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_cc3m"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_visual_genome"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_words"
 )
 
 # Normalizer args
