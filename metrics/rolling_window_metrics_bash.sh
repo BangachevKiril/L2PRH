@@ -1,63 +1,83 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=pair_metrics
-#SBATCH --output=logs/pair_metrics_%A_%a.out
-#SBATCH --error=logs/pair_metrics_%A_%a.err
-#SBATCH --time=02:00:00
+#SBATCH --job-name=sliding_metrics
+#SBATCH --output=logs/sliding_metrics_%A_%a.out
+#SBATCH --error=logs/sliding_metrics_%A_%a.err
+#SBATCH --time=05:59:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --partition=mit_normal_gpu
-#SBATCH --gres=gpu:h200:1
-#SBATCH --array=0-29   # fixed 30 tasks, works for ANY number of pairs
+#SBATCH --partition=mit_preemptable
+#SBATCH --gres=gpu:1
+#SBATCH --array=0-1
 
 mkdir -p logs
 
-# ------------------------------------------------------------
-# ENV
-# ------------------------------------------------------------
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate GPUenv   # EDIT if needed
+conda activate GPUenv
 
-# ------------------------------------------------------------
-# USER CONFIG
-# ------------------------------------------------------------
 PY_SCRIPT="rolling_window_metrics.py"
 
-# Root directory that contains per-model folders
-# e.g. /home/kirilb/orcd/pool/PRH_data/embedded_words/<MODEL>/text_embeddings(_normalized).npy
-INPUT_PATH="/home/kirilb/orcd/scratch/PRH_data/embedded_words"
-OUTPUT_DIR="/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words/"
+INPUT_PATH="/home/kirilb/orcd/scratch/PRH_data/embedded_words" 
 
-# Use normalized embeddings?
-USE_NORMALIZED=1   # 1 => add --use_normalized, 0 => raw
 
-# Rolling-window + metric params
+USE_NORMALIZED=1
+
+# Optional zero-based index list. Leave empty for old behavior.
+# Example:
+# USE_INDICES="/home/kirilb/orcd/scratch/words/single_token_common_indices.txt"
+USE_INDICES=""
+
+# Interpreted as:
+#   HOW_MANY_SAMPLES = HOW_MANY windows
+#   SUBSAMPLE_SIZE   = batch_size (window size)
+HOW_MANY_SAMPLES=10
+SUBSAMPLE_SIZE=500
 STEP_SIZE=250
-BATCH_SIZE=500
-TILL_WHEN=2750 # so that we have 10 data points
+
+SEED_BASE=12345
 DEVICE="cuda"
+
+# --- Base output dir (no suffix). Pick ONE and leave it. ---
+OUT_DIR_BASE="/home/kirilb/orcd/pool/PRH_data/metrics_embedded_words"
+
+# --- Compute OUT_DIR suffix based on USE_NORMALIZED ---
+OUT_SUFFIX=""
+if [[ "$USE_NORMALIZED" -eq 1 ]]; then
+  OUT_SUFFIX="_centered"
+elif [[ "$USE_NORMALIZED" -eq 2 ]]; then
+  OUT_SUFFIX="_centered_and_isotropic"
+elif [[ "$USE_NORMALIZED" -ne 0 ]]; then
+  echo "ERROR: USE_NORMALIZED must be 0, 1, or 2 (got $USE_NORMALIZED)"
+  exit 1
+fi
+
+INDEX_SUFFIX=""
+if [[ -n "$USE_INDICES" ]]; then
+  if [[ ! -f "$USE_INDICES" ]]; then
+    echo "ERROR: USE_INDICES is set but file does not exist: $USE_INDICES"
+    exit 1
+  fi
+  IDX_BASE=$(basename "$USE_INDICES")
+  IDX_STEM="${IDX_BASE%.txt}"
+  # Keep folder names shell-friendly.
+  IDX_STEM=$(printf '%s' "$IDX_STEM" | tr -c 'A-Za-z0-9._-' '_')
+  INDEX_SUFFIX="_${IDX_STEM}"
+fi
+
+OUT_DIR="${OUT_DIR_BASE}${OUT_SUFFIX}${INDEX_SUFFIX}"
 
 SVCCA_DIM1=10
 SVCCA_DIM2=100
 TOPK_K1=10
 TOPK_K2=100
-
-NUM_QUARTETS=1000
-QUARTET_BATCH_SIZE=512
-
-NUM_QUADRUPLETS=1000
-NUM_TRIPLETS=1000
-THRESHOLD_BATCH_SIZE=512
-
 EDIT_K1=10
 EDIT_K2=100
 
-# ------------------------------------------------------------
-# DATASETS (MODEL/text or MODEL/img)
-# ------------------------------------------------------------
 DATASETS=(
+  "codefuse-ai__F2LLM-1.7B/text"
+  "codefuse-ai__F2LLM-4B/text"
   "BAAI__bge-base-en-v1.5/text"
   "BAAI__bge-large-en-v1.5/text"
   "Qwen__Qwen3-1.7B-Base/text"
@@ -68,64 +88,67 @@ DATASETS=(
   "meta-llama__Llama-3.2-3B-Instruct/text"
   "nomic-ai__nomic-embed-text-v1.5/text"
   "nomic-ai__nomic-embed-text-v2-moe/text"
-  "codefuse-ai/F2LLM-1.7B"
-  "codefuse-ai/F2LLM-4B"
 )
 
+echo "PWD=$(pwd)"
+echo "which python=$(which python)"
+python -V
+echo "PY_SCRIPT=$PY_SCRIPT"
+echo "USE_NORMALIZED=$USE_NORMALIZED"
+echo "USE_INDICES=$USE_INDICES"
+echo "OUT_DIR_BASE=$OUT_DIR_BASE"
+echo "OUT_DIR=$OUT_DIR"
+echo "HOW_MANY_SAMPLES=$HOW_MANY_SAMPLES  SUBSAMPLE_SIZE=$SUBSAMPLE_SIZE  STEP_SIZE=$STEP_SIZE"
+ls -l "$PY_SCRIPT" || { echo "ERROR: cannot find $PY_SCRIPT in $(pwd)"; exit 1; }
+
 N=${#DATASETS[@]}
-if (( N < 2 )); then
-  echo "Need at least 2 datasets, got N=$N"
-  exit 1
-fi
-
 NUM_PAIRS=$(( N * (N - 1) / 2 ))
-echo "Total datasets: $N"
-echo "Total unordered pairs: $NUM_PAIRS"
-
-# Number of array tasks (should be 32 with --array=0-31)
-NUM_TASKS=${SLURM_ARRAY_TASK_COUNT:-32}
+NUM_TASKS=${SLURM_ARRAY_TASK_COUNT:-2}
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 
+echo "Total datasets: $N"
+echo "Total unordered pairs: $NUM_PAIRS"
 echo "Task $TASK_ID / $NUM_TASKS"
 
-# ------------------------------------------------------------
-# Common args for python
-# ------------------------------------------------------------
 COMMON_ARGS=(
   --input_path "$INPUT_PATH"
+  --output_dir "$OUT_DIR"
+  --how_many_samples "$HOW_MANY_SAMPLES"
+  --subsample_size "$SUBSAMPLE_SIZE"
   --step_size "$STEP_SIZE"
-  --batch_size "$BATCH_SIZE"
-  --till_when "$TILL_WHEN"
   --device "$DEVICE"
   --svcca_dim1 "$SVCCA_DIM1"
   --svcca_dim2 "$SVCCA_DIM2"
   --topk_k1 "$TOPK_K1"
   --topk_k2 "$TOPK_K2"
-  --num_quartets "$NUM_QUARTETS"
-  --quartet_batch_size "$QUARTET_BATCH_SIZE"
-  --num_quadruplets "$NUM_QUADRUPLETS"
-  --num_triplets "$NUM_TRIPLETS"
-  --threshold_batch_size "$THRESHOLD_BATCH_SIZE"
   --edit_k1 "$EDIT_K1"
   --edit_k2 "$EDIT_K2"
-  --output_dir "$OUTPUT_DIR"
 )
 
-if [[ "$USE_NORMALIZED" -eq 1 ]]; then
-  COMMON_ARGS+=(--use_normalized)
+COMMON_ARGS+=(--use_normalized "$USE_NORMALIZED")
+
+if [[ -n "$USE_INDICES" ]]; then
+  COMMON_ARGS+=(--use_indices "$USE_INDICES")
 fi
 
-# ------------------------------------------------------------
-# Map pair index k in [0, NUM_PAIRS) -> (i, j) with i < j
-# without building the full PAIRS list.
-# Order matches:
-#   (0,1), (0,2), ... (0,N-1), (1,2), (1,3), ...
-# ------------------------------------------------------------
+suffix=".npy"
+if [[ "$USE_NORMALIZED" -eq 1 ]]; then
+  suffix="_normalized.npy"
+elif [[ "$USE_NORMALIZED" -eq 2 ]]; then
+  suffix="_fully_normalized.npy"
+fi
+
+dataset_to_path () {
+  local ds="$1"
+  local model="${ds%/*}"
+  local kind="${ds##*/}"   # text or img
+  echo "${INPUT_PATH}/${model}/${kind}_embeddings${suffix}"
+}
+
 pair_index_to_ij () {
   local k=$1
   local rem=$k
   local i j cnt
-
   for ((i=0; i< N-1; i++)); do
     cnt=$((N - i - 1))
     if (( rem < cnt )); then
@@ -135,8 +158,6 @@ pair_index_to_ij () {
     fi
     rem=$((rem - cnt))
   done
-
-  echo "ERROR"
   return 1
 }
 
@@ -151,22 +172,51 @@ run_pair_k () {
 
   local DS1="${DATASETS[$i]}"
   local DS2="${DATASETS[$j]}"
+  local SEED=$((SEED_BASE + k))
+
+  local P1 P2
+  P1=$(dataset_to_path "$DS1")
+  P2=$(dataset_to_path "$DS2")
+
+  local OUT_NAME="${DS1//\//__}_${DS2//\//__}.npz"
+  local OUT_PATH="${OUT_DIR%/}/$OUT_NAME"
 
   echo "------------------------------------------------------------"
-  echo "Task $TASK_ID: pair k=$k  (i=$i, j=$j)"
+  echo "Task $TASK_ID: pair k=$k (i=$i, j=$j)"
   echo "Comparing: $DS1  vs  $DS2"
-  echo "Input root: $INPUT_PATH"
-  echo "Normalized: $USE_NORMALIZED"
+  echo "Seed: $SEED (unused for sliding windows; kept for compatibility)"
+  echo "Expecting:"
+  echo "  X1: $P1"
+  echo "  X2: $P2"
+  echo "Will write:"
+  echo "  OUT: $OUT_PATH"
   echo "------------------------------------------------------------"
 
-  python -u "$PY_SCRIPT" "$DS1" "$DS2" "${COMMON_ARGS[@]}"
+  if [[ ! -f "$P1" ]]; then
+    echo "SKIP missing: $P1"
+    return 0
+  fi
+  if [[ ! -f "$P2" ]]; then
+    echo "SKIP missing: $P2"
+    return 0
+  fi
+
+  mkdir -p "$OUT_DIR"
+
+  python -u "$PY_SCRIPT" "$DS1" "$DS2" \
+    --seed "$SEED" \
+    --output_name "$OUT_NAME" \
+    --profile_metrics \
+    "${COMMON_ARGS[@]}"
+
+  if [[ ! -s "$OUT_PATH" ]]; then
+    echo "ERROR: python returned but output file not created: $OUT_PATH"
+    exit 1
+  fi
 
   echo "Done pair k=$k : $DS1 vs $DS2"
 }
 
-# ------------------------------------------------------------
-# Strided assignment: this task runs k = TASK_ID, TASK_ID+NUM_TASKS, ...
-# ------------------------------------------------------------
 for ((k=TASK_ID; k<NUM_PAIRS; k+=NUM_TASKS)); do
   run_pair_k "$k"
 done
