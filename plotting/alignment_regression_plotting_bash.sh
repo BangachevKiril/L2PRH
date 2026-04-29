@@ -87,19 +87,20 @@ try:
     )
     print(f"[sanity] alignment shape = {Alignment.shape}", flush=True)
 
-    out = alignment_regression_plotting.fit_alignment_on_features_and_plot_coef_heatmap(
-        metrics_dir=metrics_dir,
-        models=models,
-        feature_tensor=features,
-        lam=lam,
-        feature_names=feat_names,
-        sort_keys=None,
-        annotate=False,
-        fit_intercept=False,
-        save_fig=save_fig,
-        title=title,
-        close_plot=True,
-        show_plot=False,
+    out = alignment_regression_plotting.fit_all_metrics_from_path_and_plot_coef_heatmap(
+    metrics_dir=metrics_dir,
+    models=models,
+    feature_tensor=features,
+    lam=lam,
+    feature_names=feat_names,
+    feature_names_human=alignment_regression_plotting.feature_names_human,
+    sort_keys=None,
+    annotate=False,
+    fit_intercept=False,
+    save_fig=save_fig,
+    title=title,
+    close_plot=True,
+    show_plot=False,
     )
 
     print(f"[done] {save_fig}", flush=True)
