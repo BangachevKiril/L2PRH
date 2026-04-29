@@ -80,7 +80,7 @@ D="${DS_LIST[$D_IDX]}"
 SPARSITY_PATTERN="${SPARSITY_PATTERNS[$S_IDX]}"
 USE_NORMALIZED="${USE_NORMALIZED_LIST[$U_IDX]}"
 
-TOPK_ROOT="/home/kirilb/orcd/scratch/alt_sae_prh/batchtopk_sae/topk_sae_${DATASET}"
+TOPK_ROOT="/home/kirilb/orcd/scratch/PRH_data/topk_sae_${DATASET}"
 OUT_TOPK_ROOT="/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_${DATASET}"
 
 # --------------------- suffix depends on normalization/truncation ---------------------

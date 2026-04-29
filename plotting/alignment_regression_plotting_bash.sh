@@ -1,22 +1,22 @@
 #!/bin/bash
 #SBATCH --job-name=regression_diagrams
-#SBATCH --output=/home/kirilb/data/PRH/logs/regression_diagrams_%A_%a.out
-#SBATCH --error=/home/kirilb/data/PRH/logs/regression_diagrams_%A_%a.err
+#SBATCH --output=logs/regression_diagrams_%A_%a.out
+#SBATCH --error=logs/regression_diagrams_%A_%a.err
 #SBATCH --array=0-8
-#SBATCH --partition=mit_normal
+#SBATCH --partition=mit_preemptable
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --time=04:00:00
+#SBATCH --time=00:03:00
 
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
-mkdir -p /home/kirilb/data/PRH/logs
-mkdir -p /home/kirilb/data/PRH/regression_diagrams
+mkdir -p logs
+mkdir -p /home/kirilb/data/L2PRH/regression_diagrams
 
-cd /home/kirilb/data/PRH
+cd /home/kirilb/data/L2PRH
 
 python - <<'PY'
 import os
@@ -26,8 +26,8 @@ import traceback
 import matplotlib
 matplotlib.use("Agg")
 
-PRH_ROOT = "/home/kirilb/data/PRH"
-UTILS_DIR = os.path.join(PRH_ROOT, "Utils")
+PRH_ROOT = "/home/kirilb/data/L2PRH"
+UTILS_DIR = os.path.join(PRH_ROOT, "plotting")
 
 for p in [PRH_ROOT, UTILS_DIR]:
     if p not in sys.path:

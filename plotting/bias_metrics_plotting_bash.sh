@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH -J bias_diag
-#SBATCH -p mit_normal
+#SBATCH -p mit_preemptable
 #SBATCH -N 1
 #SBATCH -n 1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=00:25:00
+#SBATCH --mem=8G
+#SBATCH --time=00:05:00
 #SBATCH --array=0-23
 #SBATCH -o logs/bias_diag_%A_%a.out
 #SBATCH -e logs/bias_diag_%A_%a.err
@@ -17,9 +17,9 @@ conda activate plotting_env
 
 mkdir -p logs
 
-PLOT_SCRIPT="/home/kirilb/data/PRH/Utils/metric_plotting.py"
-OUT_DIR="/home/kirilb/data/PRH/bias_diagrams"
-PRH_DATA_ROOT="/home/kirilb/orcd/pool/PRH_data"
+PLOT_SCRIPT="metric_plotting.py"
+OUT_DIR="/home/kirilb/data/L2PRH/bias_diagrams"
+PRH_DATA_ROOT="/home/kirilb/orcd/scratch/PRH_data"
 
 mkdir -p "$OUT_DIR"
 
@@ -31,9 +31,9 @@ import importlib.util
 task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
 num_array_jobs = 24
 
-PLOT_SCRIPT = os.environ.get("PLOT_SCRIPT", "/home/kirilb/data/PRH/Utils/metric_plotting.py")
-OUT_DIR = os.environ.get("OUT_DIR", "/home/kirilb/data/PRH/bias_diagrams")
-PRH_DATA_ROOT = os.environ.get("PRH_DATA_ROOT", "/home/kirilb/orcd/pool/PRH_data")
+PLOT_SCRIPT = os.environ.get("PLOT_SCRIPT", "metric_plotting.py")
+OUT_DIR = os.environ.get("OUT_DIR", "/home/kirilb/data/L2PRH/bias_diagrams")
+PRH_DATA_ROOT = os.environ.get("PRH_DATA_ROOT", "/home/kirilb/orcd/scratch/PRH_data")
 
 spec = importlib.util.spec_from_file_location("metric_plotting", PLOT_SCRIPT)
 metric_plotting = importlib.util.module_from_spec(spec)
@@ -194,20 +194,20 @@ for local_idx, job in enumerate(my_jobs, start=1):
     print(f"  filtered_dir  = {filtered_dir}")
     print(f"  savepath      = {savepath}")
 
-    M, info, fig, ax, saved_path = metric_plotting.plot_metric_heatmap_sorted(
-        models=names_sorted,
-        names_sorted=names_sorted,
-        abbreviated_model_names=abbreviated_model_names,
-        metric=metric_key,
-        raw_dir=raw_dir,
-        filtered_dir=filtered_dir,
-        panel=panel,
-        title=f"{panel_name} {metric_title} Alignment over {dataset_title}",
-        savepath=savepath,
-        type_name=type_name,
-        type_index=type_index,
-        close_plot=True,
-    )
+    M, info, fig, ax, saved_path = metric_plotting.plot_single_metric_from_npz_sorted(
+    models=names_sorted,
+    names_sorted=names_sorted,
+    abbreviated_model_names=abbreviated_model_names,
+    metric=metric_key,
+    raw_dir=raw_dir,
+    filtered_dir=filtered_dir,
+    panel=panel,
+    title=f"{panel_name} {metric_title} Alignment over {dataset_title}",
+    savepath=savepath,
+    type_name=type_name,
+    type_index=type_index,
+    close_plot=True,
+    show_plot=False,)
 
 print("")
 print(f"Array task {task_id} done.")
