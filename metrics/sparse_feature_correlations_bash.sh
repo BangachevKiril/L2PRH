@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --partition=mit_normal
-#SBATCH --array=0-11
+#SBATCH --array=0-23
 
 mkdir -p logs
 
@@ -32,7 +32,7 @@ SPARSITY_PATTERNS=("kvar" "k_32" "k_64" "k_128")
 N_SPARSITY=${#SPARSITY_PATTERNS[@]}
 
 PY_SCRIPT="sparse_feature_correlations.py"
-BASE_ROOT="/home/kirilb/orcd/pool/PRH_data"
+BASE_ROOT="/home/kirilb/orcd/scratch/PRH_data"
 SEEDS=(0 1 2 3 4 5 6 7 8 9) # List of seeds to process for random correlation baselines
 STRICT=1
 

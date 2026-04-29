@@ -39,7 +39,7 @@ import alignment_regression_plotting
 # ------------------------------------------------------------
 # Fixed inputs
 # ------------------------------------------------------------
-xlsx_path = "/home/kirilb/orcd/pool/PRH_data/model_specifications.xlsx"
+xlsx_path = "/home/kirilb/data/L2PRH/model_specifications.xlsx"
 
 names = ["coco", "cc3m", "visual_genome"]
 Names = ["COCO", "CC3M", "Visual Genome"]
@@ -56,8 +56,8 @@ if task_id < 0 or task_id >= len(jobs):
 
 name, Name, lam = jobs[task_id]
 
-metrics_dir = f"/home/kirilb/orcd/pool/PRH_data/metrics_embedded_{name}_centered/"
-save_fig = f"/home/kirilb/data/PRH/regression_diagrams/importance_of_specifics_{name}_centered_{lam}.pdf"
+metrics_dir = f"/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_{name}_centered/"
+save_fig = f"/home/kirilb/data/L2PRH/regression_diagrams/importance_of_specifics_{name}_centered_{lam}.pdf"
 title = (
     f"Importance of Models Specifications for Alignment of Centered Features over {Name}\n"
     f"(Via Ridge with λ={lam:.1f})"

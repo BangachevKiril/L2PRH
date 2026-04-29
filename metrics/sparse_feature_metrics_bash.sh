@@ -8,7 +8,7 @@
 #SBATCH --mem=128G
 #SBATCH --partition=mit_normal_gpu
 #SBATCH --gres=gpu:1
-#SBATCH --array=0-7   # set to 0-(#corpora * #dims * #sparsities * #normalizations - 1)
+#SBATCH --array=0-20   # set to 0-(#corpora * #dims * #sparsities * #normalizations - 1)
 
 mkdir -p logs
 
