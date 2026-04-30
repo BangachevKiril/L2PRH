@@ -3,11 +3,11 @@
 #SBATCH --job-name=truncate_npz
 #SBATCH --output=logs/truncate_npz_%A_%a.out
 #SBATCH --error=logs/truncate_npz_%A_%a.err
-#SBATCH --time=06:00:00
+#SBATCH --time=01:00:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=64G
-#SBATCH --partition=mit_normal     # <-- change to your CPU partition
-#SBATCH --array=0-0                 # <-- set to 0-(NUM_ROOTS-1)
+#SBATCH --partition=mit_preemptable     # <-- change to your CPU partition
+#SBATCH --array=0-2                 # <-- set to 0-(NUM_ROOTS-1)
 
 mkdir -p logs
 

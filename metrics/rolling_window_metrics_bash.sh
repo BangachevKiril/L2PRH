@@ -40,7 +40,7 @@ SEED_BASE=12345
 DEVICE="cuda"
 
 # --- Base output dir (no suffix). Pick ONE and leave it. ---
-OUT_DIR_BASE="/home/kirilb/orcd/pool/PRH_data/metrics_embedded_words"
+OUT_DIR_BASE="/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words"
 
 # --- Compute OUT_DIR suffix based on USE_NORMALIZED ---
 OUT_SUFFIX=""

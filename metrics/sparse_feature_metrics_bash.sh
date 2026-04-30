@@ -27,6 +27,11 @@ CORPUS_LIST=(
   "visual_genome"
 )
 
+CORPUS_LIST=(
+  "cc3m"
+  "visual_genome"
+)
+
 HOW_MANY_SAMPLES=10
 SUBSAMPLE_SIZE=1000
 SEED_BASE=12345

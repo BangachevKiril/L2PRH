@@ -1,22 +1,22 @@
 #!/bin/bash
 #SBATCH --job-name=noise_diagrams
-#SBATCH --output=/home/kirilb/data/PRH/logs/noise_diagrams_%A_%a.out
-#SBATCH --error=/home/kirilb/data/PRH/logs/noise_diagrams_%A_%a.err
+#SBATCH --output=logs/noise_diagrams_%A_%a.out
+#SBATCH --error=logs/noise_diagrams_%A_%a.err
 #SBATCH --array=0-23
-#SBATCH --partition=mit_normal
+#SBATCH --partition=mit_preemptable
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --time=04:00:00
+#SBATCH --time=00:10:00
 
 module load miniforge
 CONDA_BASE=$(conda info --base)
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate GPUenv
 
-mkdir -p /home/kirilb/data/PRH/logs
-mkdir -p /home/kirilb/data/PRH/noise_diagrams
+mkdir -p logs
+mkdir -p /home/kirilb/data/L2PRH/noise_diagrams
 
-cd /home/kirilb/data/PRH
+cd /home/kirilb/data/L2PRH
 
 python - <<'PY'
 import os
@@ -27,12 +27,12 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 
-PRH_ROOT = "/home/kirilb/data/PRH"
-UTILS_DIR = os.path.join(PRH_ROOT, "Utils")
+PRH_ROOT = "/home/kirilb/data/L2PRH"
+UTILS_DIR = os.path.join(PRH_ROOT, "plotting")
 
 for p in [PRH_ROOT, UTILS_DIR]:
     if p not in sys.path:
-        sys.path.append(p)
+        sys.path.insert(0, p)
 
 import noise_plotting
 
@@ -116,8 +116,8 @@ list_2 = models[j]
 abbreviated_model_names_1 = abbrev_models[i]
 abbreviated_model_names_2 = abbrev_models[j]
 
-rolling_metrics_dir = "/home/kirilb/orcd/pool/PRH_data/metrics_embedded_words_centered/"
-output_dir = Path("/home/kirilb/data/PRH/noise_diagrams")
+rolling_metrics_dir = "/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words_centered_single_token_common_indices/"
+output_dir = Path("/home/kirilb/data/L2PRH/noise_diagrams_single_token_common_indices")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 title = f"{_HUMAN_TITLES[metric]} Alignment vs Word Frequency, {model_types[i]} vs {model_types[j]}"
@@ -138,7 +138,7 @@ print(f"allow_same_family         = {allow_same_family}")
 print("=" * 80, flush=True)
 
 try:
-    out = noise_plotting.plot_noise_diagram_with_regression_and_heatmaps(
+    out = noise_plotting.plot_single_metric_with_regression_and_heatmaps(
         metric_key=metric,
         list_1=list_1,
         list_2=list_2,
