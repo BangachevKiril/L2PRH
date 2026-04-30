@@ -116,8 +116,8 @@ list_2 = models[j]
 abbreviated_model_names_1 = abbrev_models[i]
 abbreviated_model_names_2 = abbrev_models[j]
 
-rolling_metrics_dir = "/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words_centered_single_token_common_indices/"
-output_dir = Path("/home/kirilb/data/L2PRH/noise_diagrams_single_token_common_indices")
+rolling_metrics_dir = "/home/kirilb/orcd/scratch/PRH_data/metrics_embedded_words_centered_adjective_indices/"
+output_dir = Path("/home/kirilb/data/L2PRH/noise_diagrams_adjective_indices")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 title = f"{_HUMAN_TITLES[metric]} Alignment vs Word Frequency, {model_types[i]} vs {model_types[j]}"

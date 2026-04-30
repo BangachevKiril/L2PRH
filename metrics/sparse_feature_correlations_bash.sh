@@ -1,54 +1,46 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=sparse_corr_balanced
-#SBATCH --output=logs/sparse_corr_balanced_%A_%a.out
-#SBATCH --error=logs/sparse_corr_balanced_%A_%a.err
+#SBATCH --job-name=sparse_corr_split11
+#SBATCH --output=logs/sparse_corr_split11_%A_%a.out
+#SBATCH --error=logs/sparse_corr_split11_%A_%a.err
 #SBATCH --time=11:59:00
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --partition=mit_normal
-#SBATCH --array=0-48
 
 mkdir -p logs
 
-# =========================
-# Environment
-# =========================
-module load miniforge
-CONDA_BASE=$(conda info --base)
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate GPUenv
+# ============================================================
+# How to launch
+# ============================================================
+# Preferred from a login node:
+#   bash sparse_feature_correlations_split11_bash.sh
+#
+# The script computes the total number of runs and submits itself as an array:
+#   one array task = one dataset, one dimension S/D, one sparsity pattern,
+#                    and exactly one of the 11 computations
+#                    ordinary run or one random-baseline seed.
+#
+# You can also submit manually with:
+#   sbatch --array=0-N sparse_feature_correlations_split11_bash.sh
+# where N = total_runs - 1.
 
 # =========================
 # Sweep axes
 # =========================
-DS_LIST=(8192 16384)
-ND=${#DS_LIST[@]}
-
+DS_LIST=(16384)
 DATASETS=("coco" "visual_genome" "cc3m")
-N_DATASETS=${#DATASETS[@]}
-
-SPARSITY_PATTERNS=("kvar" "k_32" "k_64" "k_128")
-N_SPARSITY=${#SPARSITY_PATTERNS[@]}
+SPARSITY_PATTERNS=("kvar")
 
 # =========================
 # Script + knobs
 # =========================
-PY_SCRIPT="sparse_feature_correlations.py"
-
-REUSE_PERM_FOR_BINARY=0    # 1 -> add --reuse_perm_for_binary
 BASE_SEED=0
 CACHE_MODELS=4
+CACHE_BINARY_MODELS=4
 USE_TRUNCATED=1
-
-# Fixed array width
-N_ARRAY_JOBS=66
-GRID_ID=${SLURM_ARRAY_TASK_ID:-0}
-
-if (( GRID_ID < 0 || GRID_ID >= N_ARRAY_JOBS )); then
-  echo "ERROR: SLURM_ARRAY_TASK_ID=$GRID_ID out of range [0, $((N_ARRAY_JOBS-1))]"
-  exit 1
-fi
+SKIP_EXISTING=1
+REUSE_PERM_FOR_BINARY=0    # 1 -> add --reuse_perm_for_binary 1
 
 # =========================
 # Models list
@@ -132,6 +124,25 @@ get_k_list_name () {
   esac
 }
 
+build_runs () {
+  RUNS=()
+
+  for dataset in "${DATASETS[@]}"; do
+    for d in "${DS_LIST[@]}"; do
+      for sparsity_pattern in "${SPARSITY_PATTERNS[@]}"; do
+        # ordinary non-baseline computation
+        RUNS+=("${dataset}|${d}|${sparsity_pattern}|0|${BASE_SEED}")
+
+        # random-baseline computations, one seed per array task
+        for s in 0 1 2 3 4 5 6 7 8 9; do
+          seed=$((BASE_SEED + s))
+          RUNS+=("${dataset}|${d}|${sparsity_pattern}|1|${seed}")
+        done
+      done
+    done
+  done
+}
+
 run_one () {
   local dataset="$1"
   local d="$2"
@@ -163,12 +174,14 @@ run_one () {
   mkdir -p "$out_dir"
 
   cmd=(
-    python -u "$PY_SCRIPT"
+    python -u "sparse_feature_correlations.py"
     --d "$d"
     --out_dir "$out_dir"
     --cache_models "$CACHE_MODELS"
+    --cache_binary_models "$CACHE_BINARY_MODELS"
     --use_truncated "$USE_TRUNCATED"
     --seed "$seed"
+    --skip_existing "$SKIP_EXISTING"
     --models "${MODELS[@]}"
     --ks "${k_list_active[@]}"
     --root "$root"
@@ -183,12 +196,14 @@ run_one () {
   fi
 
   echo "========================================"
+  echo "GRID_ID=${SLURM_ARRAY_TASK_ID:-manual}"
   echo "DATASET=$dataset"
-  echo "D=$d"
+  echo "S_OR_D=$d"
   echo "SPARSITY_PATTERN=$sparsity_pattern"
   echo "RAND_PERMUTE_BASELINE=$rand_permute_baseline"
   echo "SEED=$seed"
   echo "OUT_DIR=$out_dir"
+  echo "PY_SCRIPT=$PY_SCRIPT"
   echo "Running: ${cmd[*]}"
   echo "========================================"
 
@@ -196,28 +211,9 @@ run_one () {
 }
 
 # =========================
-# Build the full run list
-# Each run = one call to compare_SAEs_different_k_updated.py
-# Format per entry:
-#   dataset|d|sparsity_pattern|rand_permute_baseline|seed
+# Build run list and optionally self-submit
 # =========================
-RUNS=()
-
-for dataset in "${DATASETS[@]}"; do
-  for d in "${DS_LIST[@]}"; do
-    for sparsity_pattern in "${SPARSITY_PATTERNS[@]}"; do
-      # ordinary run
-      RUNS+=("${dataset}|${d}|${sparsity_pattern}|0|${BASE_SEED}")
-
-      # baseline runs, seeds 0..9 shifted by BASE_SEED
-      for s in 0 1 2 3 4 5 6 7 8 9; do
-        seed=$((BASE_SEED + s))
-        RUNS+=("${dataset}|${d}|${sparsity_pattern}|1|${seed}")
-      done
-    done
-  done
-done
-
+build_runs
 TOTAL_RUNS=${#RUNS[@]}
 
 if (( TOTAL_RUNS == 0 )); then
@@ -225,30 +221,40 @@ if (( TOTAL_RUNS == 0 )); then
   exit 0
 fi
 
-# =========================
-# Even split across 48 array jobs
-# Job j gets runs:
-#   [ floor(j*k/48), ..., floor((j+1)*k/48)-1 ]
-# Hence each job gets k//48 or k//48 + 1 runs
-# =========================
-START_IDX=$(( GRID_ID * TOTAL_RUNS / N_ARRAY_JOBS ))
-END_EXCL=$(( (GRID_ID + 1) * TOTAL_RUNS / N_ARRAY_JOBS ))
-N_LOCAL=$(( END_EXCL - START_IDX ))
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+  echo "Submitting ${TOTAL_RUNS} array task(s): 0-$((TOTAL_RUNS - 1))"
+  echo "One task = one dataset, one S/D, one sparsity, and one of the 11 computations."
+  sbatch --array=0-$((TOTAL_RUNS - 1)) "$0" "$@"
+  exit $?
+fi
 
-echo "GRID_ID=$GRID_ID / $((N_ARRAY_JOBS - 1))"
-echo "TOTAL_RUNS=$TOTAL_RUNS"
-echo "Assigned run indices: [$START_IDX, $((END_EXCL - 1))]"
-echo "N_LOCAL=$N_LOCAL"
-
-if (( N_LOCAL <= 0 )); then
-  echo "This array task has no assigned runs."
-  exit 0
+if [[ -z "${SLURM_ARRAY_TASK_ID:-}" ]]; then
+  echo "ERROR: This script must run as a SLURM array job."
+  echo "Run it from a login node with: bash $0"
+  echo "or manually submit with: sbatch --array=0-$((TOTAL_RUNS - 1)) $0"
+  exit 1
 fi
 
 # =========================
-# Execute assigned runs
+# Environment
 # =========================
-for (( idx=START_IDX; idx<END_EXCL; idx++ )); do
-  IFS='|' read -r dataset d sparsity_pattern rand_permute_baseline seed <<< "${RUNS[$idx]}"
-  run_one "$dataset" "$d" "$sparsity_pattern" "$rand_permute_baseline" "$seed"
-done
+module load miniforge
+CONDA_BASE=$(conda info --base)
+source "$CONDA_BASE/etc/profile.d/conda.sh"
+conda activate GPUenv
+
+GRID_ID=${SLURM_ARRAY_TASK_ID}
+
+if (( GRID_ID < 0 || GRID_ID >= TOTAL_RUNS )); then
+  echo "ERROR: SLURM_ARRAY_TASK_ID=$GRID_ID out of range [0, $((TOTAL_RUNS - 1))]"
+  exit 1
+fi
+
+IFS='|' read -r dataset d sparsity_pattern rand_permute_baseline seed <<< "${RUNS[$GRID_ID]}"
+
+# =========================
+# Execute exactly one run
+# =========================
+echo "TOTAL_RUNS=$TOTAL_RUNS"
+echo "Running exactly one assigned sub-run."
+run_one "$dataset" "$d" "$sparsity_pattern" "$rand_permute_baseline" "$seed"

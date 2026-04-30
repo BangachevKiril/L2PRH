@@ -26,7 +26,7 @@ USE_NORMALIZED=1
 
 # Optional zero-based index list. Leave empty for old behavior.
 # Example:
-USE_INDICES="/home/kirilb/orcd/scratch/words/single_token_common_indices.txt"
+USE_INDICES="/home/kirilb/orcd/scratch/words/noun_indices.txt"
 # USE_INDICES=""
 
 # Interpreted as:
