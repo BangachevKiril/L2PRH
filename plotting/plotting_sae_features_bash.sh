@@ -12,17 +12,29 @@
 #
 # Usage:
 #   bash make_sparse_feature_percentile_tables_bash.sh
-#     Self-submits to Slurm after creating ./logs.
-#
-#   sbatch make_sparse_feature_percentile_tables_bash.sh
-#     Also works, but make sure ./logs already exists or submit once via bash.
+#     Creates ./logs and self-submits to Slurm.
 #
 #   SUBMIT=0 bash make_sparse_feature_percentile_tables_bash.sh
 #     Runs locally, with the same timestamped combined log.
 #
+# Default grouping:
+#   GROUP_DIMENSION=pre_truncation
+#     Groups truncated tables by the column dimension of X_features.npz,
+#     not by the model-specific dimension of X_features_truncated.npz.
+#
+# Row names:
+#   MODEL_NAME_MODE=clean
+#     Strips wrappers like topk_8192_ and final suffixes like _k_32.
+#
 # Useful overrides:
-#   OUT_DIR=sparse_feature_percentile_latex_tables WHICH=both LOW=5 HIGH=95 DIGITS=6 \
+#   WHICH=both GROUP_DIMENSION=pre_truncation GROUP_SPARSITY=pre_truncation \
 #     bash make_sparse_feature_percentile_tables_bash.sh --master-mode inline
+#
+#   GROUP_DIMENSION=actual bash make_sparse_feature_percentile_tables_bash.sh
+#     Reproduces the old grouping by post-truncation dimension.
+#
+#   MODEL_NAME_MODE=raw bash make_sparse_feature_percentile_tables_bash.sh
+#     Keeps raw folder names in table rows.
 
 # =========================
 # Self-submit helper
@@ -112,10 +124,14 @@ ROOTS=(
 
 PY_SCRIPT="plotting_sae_features.py"
 OUT_DIR="/home/kirilb/data/L2PRH/sparse_feature_percentile_latex_tables"
-WHICH="${WHICH:-truncated}"    # truncated, full, or both
+WHICH="${WHICH:-truncated}"                                  # truncated, full, or both
 LOW="${LOW:-5}"
 HIGH="${HIGH:-95}"
 DIGITS="${DIGITS:-6}"
+GROUP_DIMENSION="${GROUP_DIMENSION:-pre_truncation}"         # pre_truncation or actual
+GROUP_SPARSITY="${GROUP_SPARSITY:-pre_truncation}"           # pre_truncation, actual, or none
+ACTUAL_DIM_COLUMN="${ACTUAL_DIM_COLUMN:-auto}"               # auto, always, or never
+MODEL_NAME_MODE="${MODEL_NAME_MODE:-clean}"                  # clean or raw
 
 log "PY_SCRIPT=$PY_SCRIPT"
 log "OUT_DIR=$OUT_DIR"
@@ -123,6 +139,10 @@ log "WHICH=$WHICH"
 log "LOW=$LOW"
 log "HIGH=$HIGH"
 log "DIGITS=$DIGITS"
+log "GROUP_DIMENSION=$GROUP_DIMENSION"
+log "GROUP_SPARSITY=$GROUP_SPARSITY"
+log "ACTUAL_DIM_COLUMN=$ACTUAL_DIM_COLUMN"
+log "MODEL_NAME_MODE=$MODEL_NAME_MODE"
 log "Extra CLI args: $*"
 
 if [[ ! -f "$PY_SCRIPT" ]]; then
@@ -136,8 +156,12 @@ for ROOT in "${ROOTS[@]}"; do
     log "WARNING: root folder not found: $ROOT"
   else
     N_STATS=$(find "$ROOT" -name 'sparse_features_statistics.npz' -type f 2>/dev/null | wc -l | tr -d ' ')
+    N_FULL=$(find "$ROOT" -name 'X_features.npz' -type f 2>/dev/null | wc -l | tr -d ' ')
+    N_TRUNC=$(find "$ROOT" -name 'X_features_truncated.npz' -type f 2>/dev/null | wc -l | tr -d ' ')
     log "ROOT=$ROOT"
     log "  sparse_features_statistics.npz files found: $N_STATS"
+    log "  X_features.npz files found:                 $N_FULL"
+    log "  X_features_truncated.npz files found:       $N_TRUNC"
   fi
 done
 
@@ -152,10 +176,15 @@ CMD=(
   --low "$LOW"
   --high "$HIGH"
   --digits "$DIGITS"
+  --group-dimension "$GROUP_DIMENSION"
+  --group-sparsity "$GROUP_SPARSITY"
+  --actual-dim-column "$ACTUAL_DIM_COLUMN"
+  --model-name-mode "$MODEL_NAME_MODE"
 )
 
 # Extra flags can be passed through, e.g.
 #   bash make_sparse_feature_percentile_tables_bash.sh --which both --master-mode inline
+# If a flag is passed both through environment/defaults and here, argparse uses the later CLI value.
 if (( $# > 0 )); then
   CMD+=("$@")
 fi

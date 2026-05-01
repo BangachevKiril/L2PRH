@@ -1,0 +1,44 @@
+\begin{table}[htbp]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+Model & $d_{\mathrm{trunc}}$ & 5\% & 95\% & 95\%/5\% \\
+\midrule
+\texttt{BAAI\_\_bge-base-en-v1.5\_text} & 6871 & 0.0150767 & 0.19369 & 12.847 \\
+\texttt{BAAI\_\_bge-large-en-v1.5\_text} & 6731 & 0.0147138 & 0.194863 & 13.2435 \\
+\texttt{codefuse-ai\_\_F2LLM-1.7B\_text} & 7814 & 0.0179978 & 0.20576 & 11.4325 \\
+\texttt{codefuse-ai\_\_F2LLM-4B\_text} & 7907 & 0.018782 & 0.196997 & 10.4886 \\
+\texttt{facebook\_\_dinov2-base\_img} & 8183 & 0.0246011 & 0.186635 & 7.58645 \\
+\texttt{facebook\_\_dinov2-large\_img} & 8175 & 0.0206329 & 0.197408 & 9.56765 \\
+\texttt{facebook\_\_vit-mae-huge\_img} & 8053 & 0.0194247 & 0.10785 & 5.55222 \\
+\texttt{facebook\_\_vit-mae-large\_img} & 7972 & 0.0233576 & 0.118923 & 5.09141 \\
+\texttt{google\_\_gemma-3-1b-it\_text} & 7774 & 0.0200643 & 0.145393 & 7.24634 \\
+\texttt{google\_\_gemma-3-4b-it\_text} & 7867 & 0.0191003 & 0.152555 & 7.98707 \\
+\texttt{google\_\_siglip2-base-patch16-256\_img} & 7994 & 0.0257089 & 0.186073 & 7.23769 \\
+\texttt{google\_\_siglip2-base-patch16-256\_text} & 7372 & 0.0165464 & 0.202135 & 12.2162 \\
+\texttt{google\_\_siglip2-large-patch16-256\_img} & 7904 & 0.0254394 & 0.192948 & 7.5846 \\
+\texttt{google\_\_siglip2-large-patch16-256\_text} & 7482 & 0.0182428 & 0.198765 & 10.8955 \\
+\texttt{laion\_\_CLIP-ViT-B-32-laion2B-s34B-b79K\_img} & 8095 & 0.0282985 & 0.171285 & 6.05279 \\
+\texttt{laion\_\_CLIP-ViT-B-32-laion2B-s34B-b79K\_text} & 7689 & 0.0157012 & 0.201916 & 12.8599 \\
+\texttt{laion\_\_CLIP-ViT-H-14-laion2B-s32B-b79K\_img} & 8028 & 0.0274348 & 0.182386 & 6.64797 \\
+\texttt{laion\_\_CLIP-ViT-H-14-laion2B-s32B-b79K\_text} & 7402 & 0.0168089 & 0.200026 & 11.9 \\
+\texttt{meta-llama\_\_Llama-3.2-1B-Instruct\_text} & 7641 & 0.0178714 & 0.14671 & 8.2092 \\
+\texttt{meta-llama\_\_Llama-3.2-3B-Instruct\_text} & 7801 & 0.0180371 & 0.155996 & 8.64864 \\
+\texttt{microsoft\_\_beit-base-patch16-224\_img} & 8180 & 0.0267853 & 0.158128 & 5.90352 \\
+\texttt{microsoft\_\_beit-large-patch16-224\_img} & 8184 & 0.026187 & 0.163896 & 6.2587 \\
+\texttt{nomic-ai\_\_nomic-embed-text-v1.5\_text} & 6548 & 0.0138204 & 0.200641 & 14.5178 \\
+\texttt{nomic-ai\_\_nomic-embed-text-v2-moe\_text} & 6730 & 0.0149274 & 0.198964 & 13.3288 \\
+\texttt{openai\_\_clip-vit-base-patch32\_img} & 8084 & 0.0257857 & 0.170134 & 6.59799 \\
+\texttt{openai\_\_clip-vit-base-patch32\_text} & 7783 & 0.0165429 & 0.195168 & 11.7977 \\
+\texttt{openai\_\_clip-vit-large-patch14\_img} & 8082 & 0.0265343 & 0.181113 & 6.8256 \\
+\texttt{openai\_\_clip-vit-large-patch14\_text} & 7555 & 0.0171566 & 0.201184 & 11.7263 \\
+\texttt{Qwen\_\_Qwen3-1.7B-Base\_text} & 7849 & 0.0170806 & 0.13574 & 7.94706 \\
+\texttt{Qwen\_\_Qwen3-4B-Base\_text} & 7743 & 0.0171648 & 0.134948 & 7.86192 \\
+\bottomrule
+\end{tabular}
+}%
+\caption{Statistics of nonzero sparse feature entries for Visual Genome (truncated sparse features), pre-truncation sparse dimension $d=8192$, and pre-truncation sparsity $k=64$.}
+\label{tab:sparse-feature-entries-visual-genome-truncated-d8192-k64}
+\end{table}

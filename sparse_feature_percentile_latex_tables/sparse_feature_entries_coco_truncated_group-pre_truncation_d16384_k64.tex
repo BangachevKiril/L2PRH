@@ -1,0 +1,44 @@
+\begin{table}[htbp]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+Model & $d_{\mathrm{trunc}}$ & 5\% & 95\% & 95\%/5\% \\
+\midrule
+\texttt{BAAI\_\_bge-base-en-v1.5\_text} & 13425 & 0.0121456 & 0.221162 & 18.2093 \\
+\texttt{BAAI\_\_bge-large-en-v1.5\_text} & 14080 & 0.0124886 & 0.215718 & 17.2732 \\
+\texttt{codefuse-ai\_\_F2LLM-1.7B\_text} & 15641 & 0.015605 & 0.238566 & 15.2877 \\
+\texttt{codefuse-ai\_\_F2LLM-4B\_text} & 15951 & 0.0169069 & 0.233267 & 13.7971 \\
+\texttt{facebook\_\_dinov2-base\_img} & 16349 & 0.0251458 & 0.183733 & 7.30671 \\
+\texttt{facebook\_\_dinov2-large\_img} & 16300 & 0.0218632 & 0.19413 & 8.87933 \\
+\texttt{facebook\_\_vit-mae-huge\_img} & 16135 & 0.0186105 & 0.098865 & 5.31231 \\
+\texttt{facebook\_\_vit-mae-large\_img} & 16064 & 0.0228066 & 0.113366 & 4.97077 \\
+\texttt{google\_\_gemma-3-1b-it\_text} & 15833 & 0.0193333 & 0.172215 & 8.9077 \\
+\texttt{google\_\_gemma-3-4b-it\_text} & 16197 & 0.0190315 & 0.187962 & 9.87633 \\
+\texttt{google\_\_siglip2-base-patch16-256\_img} & 15904 & 0.0253582 & 0.180948 & 7.13568 \\
+\texttt{google\_\_siglip2-base-patch16-256\_text} & 14425 & 0.0141629 & 0.238086 & 16.8106 \\
+\texttt{google\_\_siglip2-large-patch16-256\_img} & 15625 & 0.0250484 & 0.18953 & 7.56654 \\
+\texttt{google\_\_siglip2-large-patch16-256\_text} & 14830 & 0.0154696 & 0.234929 & 15.1864 \\
+\texttt{laion\_\_CLIP-ViT-B-32-laion2B-s34B-b79K\_img} & 16248 & 0.0284984 & 0.166281 & 5.83476 \\
+\texttt{laion\_\_CLIP-ViT-B-32-laion2B-s34B-b79K\_text} & 14551 & 0.0121581 & 0.225188 & 18.5216 \\
+\texttt{laion\_\_CLIP-ViT-H-14-laion2B-s32B-b79K\_img} & 15906 & 0.0273307 & 0.175952 & 6.43791 \\
+\texttt{laion\_\_CLIP-ViT-H-14-laion2B-s32B-b79K\_text} & 14355 & 0.013256 & 0.231981 & 17.5001 \\
+\texttt{meta-llama\_\_Llama-3.2-1B-Instruct\_text} & 16062 & 0.0195725 & 0.191495 & 9.78384 \\
+\texttt{meta-llama\_\_Llama-3.2-3B-Instruct\_text} & 16196 & 0.0182568 & 0.196727 & 10.7755 \\
+\texttt{microsoft\_\_beit-base-patch16-224\_img} & 16364 & 0.0271664 & 0.155521 & 5.72477 \\
+\texttt{microsoft\_\_beit-large-patch16-224\_img} & 16340 & 0.0267062 & 0.159824 & 5.98453 \\
+\texttt{nomic-ai\_\_nomic-embed-text-v1.5\_text} & 11943 & 0.0108978 & 0.223007 & 20.4635 \\
+\texttt{nomic-ai\_\_nomic-embed-text-v2-moe\_text} & 13154 & 0.0118922 & 0.256222 & 21.5455 \\
+\texttt{openai\_\_clip-vit-base-patch32\_img} & 16206 & 0.0256195 & 0.168311 & 6.56963 \\
+\texttt{openai\_\_clip-vit-base-patch32\_text} & 14997 & 0.0135262 & 0.218082 & 16.1229 \\
+\texttt{openai\_\_clip-vit-large-patch14\_img} & 16190 & 0.0265251 & 0.176135 & 6.64031 \\
+\texttt{openai\_\_clip-vit-large-patch14\_text} & 14616 & 0.0144087 & 0.225442 & 15.6462 \\
+\texttt{Qwen\_\_Qwen3-1.7B-Base\_text} & 16147 & 0.0191057 & 0.176288 & 9.22695 \\
+\texttt{Qwen\_\_Qwen3-4B-Base\_text} & 16203 & 0.0192802 & 0.187183 & 9.70855 \\
+\bottomrule
+\end{tabular}
+}%
+\caption{Statistics of nonzero sparse feature entries for COCO (truncated sparse features), pre-truncation sparse dimension $d=16384$, and pre-truncation sparsity $k=64$.}
+\label{tab:sparse-feature-entries-coco-truncated-d16384-k64}
+\end{table}

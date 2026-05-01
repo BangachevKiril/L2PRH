@@ -3,11 +3,17 @@ r"""
 Make LaTeX tables from sparse_features_statistics.npz files.
 
 This consumes the files produced by compute_sparse_feature_percentiles.py.
-For each root, it recursively finds sparse_features_statistics.npz files and
-writes one LaTeX table per (dataset, feature-set, sparse dimension, sparsity).
+
+Important defaults:
+  * truncated-feature tables are grouped by the pre-truncation sparse
+    dimension, i.e. the column dimension of X_features.npz;
+  * row names are cleaned so folders like
+      topk_8192_google__gemma-3-1b-it_text_k_32
+    appear as
+      google__gemma-3-1b-it_text.
 
 Default table columns:
-    Model | 5% | 95% | 95%/5%
+    Model | optional actual/truncated dim | 5% | 95% | 95%/5%
 
 Requires:
     numpy
@@ -15,6 +21,7 @@ Requires:
 Optional LaTeX packages for the generated tables:
     \usepackage{booktabs}
     \usepackage{graphicx}   % only if using the default resizebox output
+    \usepackage{longtable}  % only if using --longtable
 """
 
 import argparse
@@ -24,12 +31,14 @@ import os
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 
 
 STATS_FILE = "sparse_features_statistics.npz"
+FULL_FILE = "X_features.npz"
+TRUNC_FILE = "X_features_truncated.npz"
 
 DEFAULT_ROOTS = [
     "/home/kirilb/orcd/scratch/PRH_data/topk_sae_visual_genome",
@@ -107,6 +116,8 @@ def format_dimension(x: Any) -> str:
 
 
 def format_sparsity(x: Any) -> str:
+    if x == "all":
+        return "all"
     if intish(x):
         return str(int(round(float(x))))
     return format_float(x, digits=6)
@@ -152,8 +163,17 @@ def title_dataset(dataset: str) -> str:
     return DATASET_TITLES.get(dataset, dataset.replace("_", " ").title())
 
 
+def sort_value_for_label(s: str) -> Tuple[int, Any]:
+    if s == "all":
+        return (0, -1)
+    try:
+        return (0, float(s))
+    except Exception:
+        return (1, s)
+
+
 # -----------------------------
-# Path parsing helpers
+# Path and model-name parsing helpers
 # -----------------------------
 
 def infer_dataset_from_root(root: Path) -> str:
@@ -209,6 +229,63 @@ def infer_model_from_path(stats_path: Path, root: Path) -> str:
     return parts[-1]
 
 
+def clean_model_name(raw_model: str) -> str:
+    """
+    Strip SAE/run configuration from row names.
+
+    Example:
+        topk_8192_google__gemma-3-1b-it_text_k_32
+    becomes:
+        google__gemma-3-1b-it_text
+    """
+    s = os.path.basename(str(raw_model).rstrip("/"))
+
+    # Repeat a few times in case a name has nested/repeated wrappers.
+    for _ in range(8):
+        old = s
+
+        # Prefixes such as topk_8192_ or batchtopk_16384_.
+        s = re.sub(r"^(?:topk|batchtopk)[_-]?\d+(?:[_-]+)", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"^(?:topk|batchtopk)(?:[_-]+)", "", s, flags=re.IGNORECASE)
+
+        # Final sparsity suffixes such as _k_32, _k32, -k-64, or _kvar.
+        # Anchored at the end so model names like clip-vit-base-patch32 are preserved.
+        s = re.sub(r"(?:[_-]+)k(?:[_-]?\d+(?:\.\d+)?)$", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"(?:[_-]+)kvar$", "", s, flags=re.IGNORECASE)
+
+        if s == old:
+            break
+
+    return s or str(raw_model)
+
+
+# -----------------------------
+# Sparse NPZ shape helpers
+# -----------------------------
+
+def read_sparse_npz_ncols(path: Path) -> Optional[int]:
+    """Read the column dimension from a scipy sparse .npz without loading data."""
+    if not path.is_file():
+        return None
+    try:
+        with np.load(path, allow_pickle=False) as z:
+            if "shape" not in z:
+                return None
+            shape = np.asarray(z["shape"]).reshape(-1)
+            if shape.size < 2:
+                return None
+            return int(shape[1])
+    except Exception:
+        return None
+
+
+def first_finite(*values: Any) -> Any:
+    for value in values:
+        if is_finite_number(value):
+            return value
+    return float("nan")
+
+
 # -----------------------------
 # Data loading
 # -----------------------------
@@ -231,14 +308,15 @@ def load_one_record(
     which: str,
     low: float,
     high: float,
+    model_name_mode: str,
 ) -> Dict[str, Any]:
     with np.load(stats_path, allow_pickle=False) as z:
         levels = np.asarray(z["percentile_levels"], dtype=float)
         pct_key = f"{which}_percentiles"
-        sparse_dim_key = f"sparse_dimension_{which}"
-        sparsity_key = f"{which}_sparsity"
+        actual_dim_key = f"sparse_dimension_{which}"
+        actual_sparsity_key = f"{which}_sparsity"
 
-        missing = [key for key in (pct_key, sparse_dim_key, sparsity_key) if key not in z]
+        missing = [key for key in (pct_key, actual_dim_key, actual_sparsity_key) if key not in z]
         if missing:
             raise KeyError(f"Missing keys in {stats_path}: {missing}")
 
@@ -251,19 +329,43 @@ def load_one_record(
         else:
             ratio = float("nan")
 
-        sparse_dimension = scalar(z[sparse_dim_key])
-        sparsity = scalar(z[sparsity_key])
+        full_dim_from_file = read_sparse_npz_ncols(stats_path.parent / FULL_FILE)
+        trunc_dim_from_file = read_sparse_npz_ncols(stats_path.parent / TRUNC_FILE)
+
+        full_dim_from_stats = scalar(z["sparse_dimension_full"]) if "sparse_dimension_full" in z else float("nan")
+        trunc_dim_from_stats = scalar(z["sparse_dimension_truncated"]) if "sparse_dimension_truncated" in z else float("nan")
+
+        pre_truncation_sparse_dimension = first_finite(full_dim_from_file, full_dim_from_stats)
+        if which == "full":
+            actual_sparse_dimension = first_finite(full_dim_from_file, full_dim_from_stats, scalar(z[actual_dim_key]))
+        else:
+            actual_sparse_dimension = first_finite(trunc_dim_from_file, trunc_dim_from_stats, scalar(z[actual_dim_key]))
+
+        actual_sparsity = scalar(z[actual_sparsity_key])
+        pre_truncation_sparsity = scalar(z["full_sparsity"]) if "full_sparsity" in z else actual_sparsity
         dense_dimension = scalar(z["dense_dimension"]) if "dense_dimension" in z else float("nan")
+
+    raw_model = infer_model_from_path(stats_path, root)
+    if model_name_mode == "raw":
+        model = raw_model
+    else:
+        model = clean_model_name(raw_model)
 
     return {
         "dataset": dataset,
         "feature_set": which,
-        "model": infer_model_from_path(stats_path, root),
+        "model": model,
+        "raw_model": raw_model,
         "root": str(root),
         "stats_path": str(stats_path),
         "dense_dimension": dense_dimension,
-        "sparse_dimension": sparse_dimension,
-        "sparsity": sparsity,
+        "pre_truncation_sparse_dimension": pre_truncation_sparse_dimension,
+        "actual_sparse_dimension": actual_sparse_dimension,
+        "pre_truncation_sparsity": pre_truncation_sparsity,
+        "actual_sparsity": actual_sparsity,
+        # Backward-compatible aliases.
+        "sparse_dimension": actual_sparse_dimension,
+        "sparsity": actual_sparsity,
         "p_low": p_low,
         "p_high": p_high,
         "ratio": ratio,
@@ -296,6 +398,7 @@ def collect_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         which=which,
                         low=args.low,
                         high=args.high,
+                        model_name_mode=args.model_name_mode,
                     )
                 except Exception as e:
                     if args.strict:
@@ -308,29 +411,62 @@ def collect_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
 
 
 # -----------------------------
-# LaTeX generation
+# Grouping
 # -----------------------------
 
-def group_key(rec: Dict[str, Any]) -> Tuple[str, str, str, str]:
+def group_dimension_value(rec: Dict[str, Any], args: argparse.Namespace) -> Any:
+    if args.group_dimension == "pre_truncation":
+        return rec["pre_truncation_sparse_dimension"]
+    return rec["actual_sparse_dimension"]
+
+
+def group_sparsity_value(rec: Dict[str, Any], args: argparse.Namespace) -> Any:
+    if args.group_sparsity == "none":
+        return "all"
+    if args.group_sparsity == "pre_truncation":
+        return rec["pre_truncation_sparsity"]
+    return rec["actual_sparsity"]
+
+
+def group_key(rec: Dict[str, Any], args: argparse.Namespace) -> Tuple[str, str, str, str]:
     return (
         rec["dataset"],
         rec["feature_set"],
-        format_dimension(rec["sparse_dimension"]),
-        format_sparsity(rec["sparsity"]),
+        format_dimension(group_dimension_value(rec, args)),
+        format_sparsity(group_sparsity_value(rec, args)),
     )
 
 
 def sort_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return sorted(records, key=lambda r: (r["model"].lower(), r["model"]))
+    return sorted(records, key=lambda r: (r["model"].lower(), r["model"], r.get("raw_model", "")))
 
 
-def make_caption(dataset: str, feature_set: str, d_label: str, k_label: str) -> str:
+# -----------------------------
+# LaTeX generation
+# -----------------------------
+
+def make_caption(dataset: str, feature_set: str, d_label: str, k_label: str, args: argparse.Namespace) -> str:
     feature_phrase = "truncated sparse features" if feature_set == "truncated" else "full sparse features"
+    if args.group_dimension == "pre_truncation":
+        dim_phrase = rf"pre-truncation sparse dimension $d={latex_escape(d_label)}$"
+    else:
+        dim_phrase = rf"sparse dimension $d={latex_escape(d_label)}$"
+
+    if args.group_sparsity == "none":
+        sparsity_phrase = "all sparsities"
+    elif args.group_sparsity == "pre_truncation":
+        sparsity_phrase = rf"pre-truncation sparsity $k={latex_escape(k_label)}$"
+    else:
+        sparsity_phrase = rf"sparsity $k={latex_escape(k_label)}$"
+
     return (
         "Statistics of nonzero sparse feature entries for "
         + latex_escape(title_dataset(dataset))
         + f" ({latex_escape(feature_phrase)}), "
-        + rf"sparse dimension $d={latex_escape(d_label)}$, and sparsity $k={latex_escape(k_label)}$."
+        + dim_phrase
+        + ", and "
+        + sparsity_phrase
+        + "."
     )
 
 
@@ -339,21 +475,50 @@ def make_table_label(dataset: str, feature_set: str, d_label: str, k_label: str)
     return f"tab:sparse-feature-entries-{slug}"
 
 
+def include_actual_dim_column(records: List[Dict[str, Any]], args: argparse.Namespace) -> bool:
+    if args.actual_dim_column == "always":
+        return True
+    if args.actual_dim_column == "never":
+        return False
+
+    actual_dims = {format_dimension(rec["actual_sparse_dimension"]) for rec in records}
+    grouped_dims = {format_dimension(group_dimension_value(rec, args)) for rec in records}
+
+    # In auto mode, show the extra dim column when grouping hides actual dimensions.
+    return len(actual_dims) > 1 or actual_dims != grouped_dims
+
+
+def actual_dim_header(records: List[Dict[str, Any]]) -> str:
+    feature_sets = {rec["feature_set"] for rec in records}
+    if feature_sets == {"truncated"}:
+        return r"$d_{\mathrm{trunc}}$"
+    if feature_sets == {"full"}:
+        return r"$d_{\mathrm{full}}$"
+    return r"$d_{\mathrm{actual}}$"
+
+
 def table_body_lines(
     records: List[Dict[str, Any]],
     low: float,
     high: float,
     digits: int,
     use_texttt: bool,
+    include_dim_col: bool,
 ) -> List[str]:
     low_header = rf"{format_float(low, digits=4)}\%"
     high_header = rf"{format_float(high, digits=4)}\%"
     ratio_header = rf"{format_float(high, digits=4)}\%/{format_float(low, digits=4)}\%"
 
+    colspec = "l" + ("r" if include_dim_col else "") + "rrr"
+    header = "Model"
+    if include_dim_col:
+        header += f" & {actual_dim_header(records)}"
+    header += f" & {low_header} & {high_header} & {ratio_header} \\\\"
+
     lines = [
-        r"\begin{tabular}{lrrr}",
+        rf"\begin{{tabular}}{{{colspec}}}",
         r"\toprule",
-        rf"Model & {low_header} & {high_header} & {ratio_header} \\",
+        header,
         r"\midrule",
     ]
 
@@ -362,7 +527,11 @@ def table_body_lines(
         p_low = format_float(rec["p_low"], digits=digits)
         p_high = format_float(rec["p_high"], digits=digits)
         ratio = format_float(rec["ratio"], digits=digits)
-        lines.append(rf"{model} & {p_low} & {p_high} & {ratio} \\")
+        row = model
+        if include_dim_col:
+            row += f" & {format_dimension(rec['actual_sparse_dimension'])}"
+        row += f" & {p_low} & {p_high} & {ratio} \\\\"
+        lines.append(row)
 
     lines.extend([
         r"\bottomrule",
@@ -373,8 +542,8 @@ def table_body_lines(
 
 def make_table(records: List[Dict[str, Any]], args: argparse.Namespace) -> str:
     first = records[0]
-    dataset, feature_set, d_label, k_label = group_key(first)
-    caption = make_caption(dataset, feature_set, d_label, k_label)
+    dataset, feature_set, d_label, k_label = group_key(first, args)
+    caption = make_caption(dataset, feature_set, d_label, k_label, args)
     label = make_table_label(dataset, feature_set, d_label, k_label)
 
     if args.longtable:
@@ -393,6 +562,7 @@ def make_table(records: List[Dict[str, Any]], args: argparse.Namespace) -> str:
         high=args.high,
         digits=args.digits,
         use_texttt=not args.no_texttt,
+        include_dim_col=include_actual_dim_column(records, args),
     )
 
     if args.resizebox:
@@ -418,16 +588,23 @@ def make_longtable(
     low_header = rf"{format_float(args.low, digits=4)}\%"
     high_header = rf"{format_float(args.high, digits=4)}\%"
     ratio_header = rf"{format_float(args.high, digits=4)}\%/{format_float(args.low, digits=4)}\%"
+    include_dim_col = include_actual_dim_column(records, args)
+
+    colspec = "l" + ("r" if include_dim_col else "") + "rrr"
+    header = "Model"
+    if include_dim_col:
+        header += f" & {actual_dim_header(records)}"
+    header += f" & {low_header} & {high_header} & {ratio_header} \\\\"
 
     lines = [
-        r"\begin{longtable}{lrrr}",
+        rf"\begin{{longtable}}{{{colspec}}}",
         rf"\caption{{{caption}}}\label{{{label}}}\\",
         r"\toprule",
-        rf"Model & {low_header} & {high_header} & {ratio_header} \\",
+        header,
         r"\midrule",
         r"\endfirsthead",
         r"\toprule",
-        rf"Model & {low_header} & {high_header} & {ratio_header} \\",
+        header,
         r"\midrule",
         r"\endhead",
     ]
@@ -437,7 +614,11 @@ def make_longtable(
         p_low = format_float(rec["p_low"], digits=args.digits)
         p_high = format_float(rec["p_high"], digits=args.digits)
         ratio = format_float(rec["ratio"], digits=args.digits)
-        lines.append(rf"{model} & {p_low} & {p_high} & {ratio} \\")
+        row = model
+        if include_dim_col:
+            row += f" & {format_dimension(rec['actual_sparse_dimension'])}"
+        row += f" & {p_low} & {p_high} & {ratio} \\\\"
+        lines.append(row)
 
     lines.extend([
         r"\bottomrule",
@@ -452,32 +633,46 @@ def make_longtable(
 # -----------------------------
 
 def write_csv(records: List[Dict[str, Any]], out_path: Path, args: argparse.Namespace) -> None:
+    p_low_name = f"p{format_float(args.low, digits=4)}"
+    p_high_name = f"p{format_float(args.high, digits=4)}"
+    ratio_name = f"p{format_float(args.high, digits=4)}_over_p{format_float(args.low, digits=4)}"
+
     fieldnames = [
         "dataset",
         "feature_set",
         "model",
+        "raw_model",
+        "group_sparse_dimension",
+        "group_sparsity",
+        "pre_truncation_sparse_dimension",
+        "actual_sparse_dimension",
+        "pre_truncation_sparsity",
+        "actual_sparsity",
         "dense_dimension",
-        "sparse_dimension",
-        "sparsity",
-        f"p{format_float(args.low, digits=4)}",
-        f"p{format_float(args.high, digits=4)}",
-        f"p{format_float(args.high, digits=4)}_over_p{format_float(args.low, digits=4)}",
+        p_low_name,
+        p_high_name,
+        ratio_name,
         "stats_path",
     ]
     with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        for rec in sorted(records, key=lambda r: (group_key(r), r["model"].lower())):
+        for rec in sorted(records, key=lambda r: (group_key(r, args), r["model"].lower(), r["raw_model"])):
             writer.writerow({
                 "dataset": rec["dataset"],
                 "feature_set": rec["feature_set"],
                 "model": rec["model"],
+                "raw_model": rec["raw_model"],
+                "group_sparse_dimension": format_dimension(group_dimension_value(rec, args)),
+                "group_sparsity": format_sparsity(group_sparsity_value(rec, args)),
+                "pre_truncation_sparse_dimension": format_dimension(rec["pre_truncation_sparse_dimension"]),
+                "actual_sparse_dimension": format_dimension(rec["actual_sparse_dimension"]),
+                "pre_truncation_sparsity": format_sparsity(rec["pre_truncation_sparsity"]),
+                "actual_sparsity": format_sparsity(rec["actual_sparsity"]),
                 "dense_dimension": format_dimension(rec["dense_dimension"]),
-                "sparse_dimension": format_dimension(rec["sparse_dimension"]),
-                "sparsity": format_sparsity(rec["sparsity"]),
-                f"p{format_float(args.low, digits=4)}": format_float(rec["p_low"], digits=args.digits),
-                f"p{format_float(args.high, digits=4)}": format_float(rec["p_high"], digits=args.digits),
-                f"p{format_float(args.high, digits=4)}_over_p{format_float(args.low, digits=4)}": format_float(rec["ratio"], digits=args.digits),
+                p_low_name: format_float(rec["p_low"], digits=args.digits),
+                p_high_name: format_float(rec["p_high"], digits=args.digits),
+                ratio_name: format_float(rec["ratio"], digits=args.digits),
                 "stats_path": rec["stats_path"],
             })
 
@@ -488,20 +683,23 @@ def write_outputs(records: List[Dict[str, Any]], args: argparse.Namespace) -> No
 
     groups: Dict[Tuple[str, str, str, str], List[Dict[str, Any]]] = defaultdict(list)
     for rec in records:
-        groups[group_key(rec)].append(rec)
+        groups[group_key(rec, args)].append(rec)
 
     group_items = sorted(
         groups.items(),
         key=lambda item: (
             item[0][0],
             0 if item[0][1] == "truncated" else 1,
-            float(item[0][2]) if item[0][2].replace(".", "", 1).isdigit() else item[0][2],
-            float(item[0][3]) if item[0][3].replace(".", "", 1).isdigit() else item[0][3],
+            sort_value_for_label(item[0][2]),
+            sort_value_for_label(item[0][3]),
         ),
     )
 
     master_lines = [
         r"% Auto-generated by make_sparse_feature_percentile_latex_tables.py",
+        rf"% Model name mode: {args.model_name_mode}",
+        rf"% Group dimension mode: {args.group_dimension}",
+        rf"% Group sparsity mode: {args.group_sparsity}",
         r"% Requires: \usepackage{booktabs}",
     ]
     if args.resizebox and not args.longtable:
@@ -518,6 +716,7 @@ def write_outputs(records: List[Dict[str, Any]], args: argparse.Namespace) -> No
             f"sparse_feature_entries_"
             f"{safe_filename(dataset)}_"
             f"{safe_filename(feature_set)}_"
+            f"group-{safe_filename(args.group_dimension)}_"
             f"d{safe_filename(d_label)}_"
             f"k{safe_filename(k_label)}.tex"
         )
@@ -525,7 +724,7 @@ def write_outputs(records: List[Dict[str, Any]], args: argparse.Namespace) -> No
         path.write_text(table_tex, encoding="utf-8")
         written_files.append(path)
 
-        master_lines.append(f"% {dataset} | {feature_set} | d={d_label} | k={k_label}")
+        master_lines.append(f"% {dataset} | {feature_set} | group d={d_label} | group k={k_label} | rows={len(recs)}")
         if args.master_mode == "input":
             master_lines.append(rf"\input{{{filename}}}")
         else:
@@ -539,8 +738,12 @@ def write_outputs(records: List[Dict[str, Any]], args: argparse.Namespace) -> No
     write_csv(records, csv_path, args)
 
     print(f"[ok] collected {len(records)} row(s) into {len(groups)} table group(s)")
+    print(f"[ok] model name mode:       {args.model_name_mode}")
+    print(f"[ok] group dimension:       {args.group_dimension}")
+    print(f"[ok] group sparsity:        {args.group_sparsity}")
+    print(f"[ok] actual dim column:     {args.actual_dim_column}")
     print(f"[ok] wrote table directory: {out_dir}")
-    print(f"[ok] wrote master TeX:       {master_path}")
+    print(f"[ok] wrote master TeX:      {master_path}")
     print(f"[ok] wrote CSV summary:     {csv_path}")
     if written_files:
         print("[ok] first few table files:")
@@ -558,7 +761,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Make LaTeX tables from sparse_features_statistics.npz files. "
-            "By default, uses columns Model, 5%, 95%, and 95%/5%."
+            "By default, truncated tables are grouped by the pre-truncation "
+            "dimension read from X_features.npz."
         )
     )
     parser.add_argument(
@@ -581,6 +785,43 @@ def parse_args() -> argparse.Namespace:
         choices=["truncated", "full", "both"],
         default="truncated",
         help="Which feature statistics to table. Default: truncated.",
+    )
+    parser.add_argument(
+        "--group-dimension",
+        choices=["pre_truncation", "actual"],
+        default="pre_truncation",
+        help=(
+            "Dimension used to group rows into tables. For truncated features, "
+            "pre_truncation means the column dimension of X_features.npz. "
+            "Default: pre_truncation."
+        ),
+    )
+    parser.add_argument(
+        "--group-sparsity",
+        choices=["pre_truncation", "actual", "none"],
+        default="pre_truncation",
+        help=(
+            "Sparsity used to group rows into tables. Default: pre_truncation. "
+            "Use none to put all sparsities with the same dataset/feature/dim into one table."
+        ),
+    )
+    parser.add_argument(
+        "--actual-dim-column",
+        choices=["auto", "always", "never"],
+        default="auto",
+        help=(
+            "Whether to include an extra row column with the actual sparse dimension. "
+            "auto shows it when grouping hides actual dimensions. Default: auto."
+        ),
+    )
+    parser.add_argument(
+        "--model-name-mode",
+        choices=["clean", "raw"],
+        default="clean",
+        help=(
+            "clean strips wrappers like topk_8192_ and final _k_32 from row names. "
+            "raw keeps folder names unchanged. Default: clean."
+        ),
     )
     parser.add_argument(
         "--low",
