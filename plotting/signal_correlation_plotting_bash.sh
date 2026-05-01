@@ -17,9 +17,9 @@ conda activate plotting_env
 
 mkdir -p logs
 
-PLOT_SCRIPT="/home/kirilb/data/PRH/Utils/metric_plotting.py"
-OUT_DIR="/home/kirilb/data/PRH/correlation_diagrams"
-PRH_DATA_ROOT="/home/kirilb/orcd/pool/PRH_data"
+PLOT_SCRIPT="/home/kirilb/data/L2PRH/plotting/metric_plotting.py"
+OUT_DIR="/home/kirilb/data/L2PRH/correlation_diagrams"
+PRH_DATA_ROOT="/home/kirilb/orcd/scratch/PRH_data"
 
 mkdir -p "$OUT_DIR"
 
@@ -31,9 +31,9 @@ import importlib.util
 task_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
 num_array_jobs = 36
 
-PLOT_SCRIPT = os.environ.get("PLOT_SCRIPT", "/home/kirilb/data/PRH/Utils/metric_plotting.py")
-OUT_DIR = os.environ.get("OUT_DIR", "/home/kirilb/data/PRH/correlation_diagrams")
-PRH_DATA_ROOT = os.environ.get("PRH_DATA_ROOT", "/home/kirilb/orcd/pool/PRH_data")
+PLOT_SCRIPT = os.environ.get("PLOT_SCRIPT", "/home/kirilb/data/L2PRH/plotting/metric_plotting.py")
+OUT_DIR = os.environ.get("OUT_DIR", "/home/kirilb/data/L2PRH/correlation_diagrams")
+PRH_DATA_ROOT = os.environ.get("PRH_DATA_ROOT", "/home/kirilb/orcd/scratch/PRH_data")
 
 spec = importlib.util.spec_from_file_location("metric_plotting", PLOT_SCRIPT)
 metric_plotting = importlib.util.module_from_spec(spec)
@@ -121,13 +121,10 @@ datasets = [
     ("visual_genome", "Visual Genome"),
 ]
 
-dimensions = [8192]
+dimensions = [16384]
 
 sparsity_patterns = [
     ("kvar", "kvar"),
-    ("k_32", "k_32"),
-    ("k_64", "k_64"),
-    ("k_128", "k_128"),
 ]
 
 panels = [
@@ -215,20 +212,20 @@ for local_idx, job in enumerate(my_jobs, start=1):
     print(f"  filtered_dir    = {filtered_dir}")
     print(f"  savepath        = {savepath}")
 
-    M, info, fig, ax, saved_path = metric_plotting.plot_metric_heatmap_sorted(
-        models=names_sorted,
-        abbreviated_model_names=abbreviated_model_names,
-        names_sorted=names_sorted,
-        metric=metric_key,
-        raw_dir=raw_dir,
-        filtered_dir=filtered_dir,
-        panel=panel,
-        raw_std_metric=raw_std_metric,
-        title=f"{panel_name} {metric_title} over {dataset_title} (d={dimension})",
-        savepath=savepath,
-        type_name=type_name,
-        type_index=type_index,
-        close_plot=True,
+    M, info, fig, ax, saved_path = metric_plotting.plot_single_metric_from_npz_sorted(
+    models=names_sorted,
+    abbreviated_model_names=abbreviated_model_names,
+    names_sorted=names_sorted,
+    metric=metric_key,
+    raw_dir=raw_dir,
+    filtered_dir=filtered_dir,
+    panel=panel,
+    raw_std_metric=raw_std_metric,
+    title=f"{panel_name} {metric_title} over {dataset_title} (d={dimension})",
+    savepath=savepath,
+    type_name=type_name,
+    type_index=type_index,
+    close_plot=True,
     )
 
 print("")

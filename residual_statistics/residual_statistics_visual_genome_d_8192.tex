@@ -1,0 +1,41 @@
+\begin{table}[ht]
+\centering
+\begin{tabular}{lccc}
+\hline
+Model & $k=32$ & $k=64$ & $k=128$ \\
+\hline
+BAAI/bge-base-en-v1.5\_text & 0.2294 & 0.1795 & 0.1412 \\
+BAAI/bge-large-en-v1.5\_text & 0.2268 & 0.1796 & 0.1431 \\
+codefuse-ai/F2LLM-1.7B\_text & 0.3082 & 0.2586 & 0.2302 \\
+codefuse-ai/F2LLM-4B\_text & 0.3321 & 0.2852 & 0.2589 \\
+facebook/dinov2-base\_img & 0.3875 & 0.3431 & 0.2962 \\
+facebook/dinov2-large\_img & 0.3908 & 0.356 & 0.3179 \\
+facebook/vit-mae-huge\_img & 0.3182 & 0.2718 & 0.2335 \\
+facebook/vit-mae-large\_img & 0.3385 & 0.2777 & 0.2333 \\
+google/gemma-3-1b-it\_text & 0.2994 & 0.2401 & 0.2033 \\
+google/gemma-3-4b-it\_text & 0.2907 & 0.243 & 0.2097 \\
+google/siglip2-base-patch16-256\_img & 0.3372 & 0.2823 & 0.2365 \\
+google/siglip2-base-patch16-256\_text & 0.2601 & 0.2085 & 0.1727 \\
+google/siglip2-large-patch16-256\_img & 0.3392 & 0.2837 & 0.2399 \\
+google/siglip2-large-patch16-256\_text & 0.2829 & 0.2296 & 0.1919 \\
+laion/CLIP-ViT-B-32-laion2B-s34B-b79K\_img & 0.3516 & 0.2896 & 0.2296 \\
+laion/CLIP-ViT-B-32-laion2B-s34B-b79K\_text & 0.2426 & 0.1938 & 0.1586 \\
+laion/CLIP-ViT-H-14-laion2B-s32B-b79K\_img & 0.3716 & 0.3208 & 0.2744 \\
+laion/CLIP-ViT-H-14-laion2B-s32B-b79K\_text & 0.2678 & 0.2172 & 0.1815 \\
+meta-llama/Llama-3.2-1B-Instruct\_text & 0.2692 & 0.215 & 0.1814 \\
+meta-llama/Llama-3.2-3B-Instruct\_text & 0.2748 & 0.2221 & 0.1881 \\
+microsoft/beit-base-patch16-224\_img & 0.4204 & 0.3736 & 0.3237 \\
+microsoft/beit-large-patch16-224\_img & 0.4504 & 0.411 & 0.3662 \\
+nomic-ai/nomic-embed-text-v1.5\_text & 0.217 & 0.1696 & 0.1309 \\
+nomic-ai/nomic-embed-text-v2-moe\_text & 0.2395 & 0.1834 & 0.1479 \\
+openai/clip-vit-base-patch32\_img & 0.3248 & 0.269 & 0.2188 \\
+openai/clip-vit-base-patch32\_text & 0.2491 & 0.2004 & 0.1618 \\
+openai/clip-vit-large-patch14\_img & 0.3626 & 0.3144 & 0.2667 \\
+openai/clip-vit-large-patch14\_text & 0.2664 & 0.2187 & 0.182 \\
+Qwen/Qwen3-1.7B-Base\_text & 0.2799 & 0.23 & 0.1988 \\
+Qwen/Qwen3-4B-Base\_text & 0.2681 & 0.2183 & 0.1863 \\
+\hline
+\end{tabular}
+\caption{Residuals for dataset visual\_genome, sparse dimension d=8192, and k in \{32, 64, 128\}.}
+\label{tab:residuals_visual_genome_d_8192}
+\end{table}

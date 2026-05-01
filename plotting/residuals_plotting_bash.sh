@@ -40,7 +40,7 @@ PY_SCRIPT="residuals_plotting.py"
 PRECISION="${PRECISION:-4}"
 QUIET="${QUIET:-0}"
 
-OUTDIR="/home/kirilb/data/PRH/residual_statistics"
+OUTDIR="/home/kirilb/data/L2PRH/residual_statistics"
 mkdir -p "$OUTDIR"
 
 NDIMS=${#DIMS[@]}
