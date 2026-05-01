@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --export=NONE
-#SBATCH --job-name=incoh_stats
-#SBATCH --output=logs/incoh_stats_%A_%a.out
-#SBATCH --error=logs/incoh_stats_%A_%a.err
-#SBATCH --time=05:00:00
+#SBATCH --job-name=rep_incoh_stats
+#SBATCH --output=logs/rep_incoh_stats_%A_%a.out
+#SBATCH --error=logs/rep_incoh_stats_%A_%a.err
+#SBATCH --time=01:00:00
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=128G
-#SBATCH --partition=mit_normal_gpu
+#SBATCH --mem=64G
+#SBATCH --partition=mit_preemptable
 #SBATCH --gres=gpu:1
-#SBATCH --array=2   # <-- change to 0-$((${#ROOTS[@]}-1))
+#SBATCH --array=0-2   # <-- change to 0-$((${#ROOTS[@]}-1))
 
 mkdir -p logs
 
@@ -24,9 +24,9 @@ conda activate GPUenv
 # User config
 # =========================
 ROOTS=(
-  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_visual_genome"
-  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_coco"
-  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_cc3m"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_visual_genome"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_coco"
+  "/home/kirilb/orcd/scratch/PRH_data/embedded_cc3m"
 )
 
 NROOTS=${#ROOTS[@]}
@@ -42,11 +42,13 @@ ROOT="${ROOTS[$GRID_ID]}"
 shift || true
 
 # By default, assume the python script is in the same directory as this slurm file.
-PY_SCRIPT="dictionary_incoherence_statistics.py"
+PY_SCRIPT="compute_embedding_incoherence_statistics.py"
 
 # Optional knobs. You can override any of these with environment variables, e.g.
-#   CHUNK_SIZE=1024 SKIP_EXISTING=1 sbatch run_incoherence_statistics_mit.slurm
+#   RANDOM_BATCH_SUBSET=4096 CHUNK_SIZE=1024 SKIP_EXISTING=1 sbatch compute_embedding_incoherence_statistics_bash.sh
 CHUNK_SIZE="${CHUNK_SIZE:-2048}"
+RANDOM_BATCH_SUBSET="${RANDOM_BATCH_SUBSET:-8192}"
+SAMPLE_SEED="${SAMPLE_SEED:-0}"
 DTYPE="${DTYPE:-float32}"
 DEVICE="${DEVICE:-cuda}"
 SKIP_EXISTING="${SKIP_EXISTING:-0}"
@@ -67,6 +69,8 @@ fi
 CMD=(python -u "$PY_SCRIPT"
   "$ROOT"
   --chunk-size "$CHUNK_SIZE"
+  --random-batch-subset "$RANDOM_BATCH_SUBSET"
+  --sample-seed "$SAMPLE_SEED"
   --dtype "$DTYPE"
   --device "$DEVICE"
 )
@@ -84,6 +88,8 @@ echo "GRID_ID=$GRID_ID / $NROOTS"
 echo "ROOT=$ROOT"
 echo "PY_SCRIPT=$PY_SCRIPT"
 echo "CHUNK_SIZE=$CHUNK_SIZE"
+echo "RANDOM_BATCH_SUBSET=$RANDOM_BATCH_SUBSET"
+echo "SAMPLE_SEED=$SAMPLE_SEED"
 echo "DTYPE=$DTYPE"
 echo "DEVICE=$DEVICE"
 echo "SKIP_EXISTING=$SKIP_EXISTING"

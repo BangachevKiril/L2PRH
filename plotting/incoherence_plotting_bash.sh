@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=2
 
 mkdir -p logs
-mkdir -p /home/kirilb/data/PRH/incoherence_diagrams/
+mkdir -p /home/kirilb/data/L2PRH/incoherence_diagrams/
 
 module load miniforge
 conda activate GPUenv
@@ -45,15 +45,15 @@ import incoherence_plotting as ip
 
 dataset = "${DATASET}"
 dataset_title = "${DATASET_TITLE}"
-base = "/home/kirilb/data/PRH/incoherence_diagrams/"
+base = "/home/kirilb/data/L2PRH/incoherence_diagrams/"
 d = ${D}
 k = ${K}
 
 os.makedirs(base, exist_ok=True)
 
 roots = [
-    f"/home/kirilb/orcd/pool/PRH_data/topk_sae_{dataset}",
-    f"/home/kirilb/orcd/pool/PRH_data/embedded_{dataset}",
+    f"/home/kirilb/orcd/scratch/PRH_data/topk_sae_{dataset}",
+    f"/home/kirilb/orcd/scratch/PRH_data/embedded_{dataset}",
 ]
 
 xs, ys, paths = ip.scatter_incoherence_statistics(

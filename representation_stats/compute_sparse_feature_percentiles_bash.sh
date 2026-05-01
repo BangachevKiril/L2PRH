@@ -23,9 +23,9 @@ conda activate GPUenv
 # User config
 # =========================
 ROOTS=(
-  "/home/kirilb/orcd/pool/PRH_data/topk_sae_visual_genome"
-  "/home/kirilb/orcd/pool/PRH_data/topk_sae_coco"
-  "/home/kirilb/orcd/pool/PRH_data/topk_sae_cc3m"
+  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_visual_genome"
+  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_coco"
+  "/home/kirilb/orcd/scratch/PRH_data/topk_sae_cc3m"
 )
 
 NROOTS=${#ROOTS[@]}
